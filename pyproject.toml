@@ -21,6 +21,9 @@ dependencies = [
   "httpx"
 ]
 
+[project.optional-dependencies]
+dev = ['numpy']
+
 [project.urls]
 Repository = "https://github.com/AnswerDotAI/safepyrun"
 Documentation = "https://AnswerDotAI.github.io/safepyrun/"
