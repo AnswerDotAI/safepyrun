@@ -1,0 +1,9 @@
+project:
+  output-dir: _docs
+
+website:
+  title: "safepyrun"
+  site-url: "https://AnswerDotAI.github.io/safepyrun"
+  description: "Safe(ish) running of python code"
+  repo-branch: main
+  repo-url: "https://github.com/AnswerDotAI/safepyrun"

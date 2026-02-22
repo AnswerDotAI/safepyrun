@@ -1,0 +1,37 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "safepyrun"
+dynamic = ["version"]
+description = "Safe(ish) running of python code"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "Apache-2.0"}
+authors = [{name = "Jeremy Howard", email = "github@jhoward.fastmail.fm"}]
+keywords = ['nbdev']
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+]
+dependencies = [
+  "restrictedpython-async",
+  "fastcore",
+  "httpx"
+]
+
+[project.urls]
+Repository = "https://github.com/AnswerDotAI/safepyrun"
+Documentation = "https://AnswerDotAI.github.io/safepyrun/"
+
+[project.entry-points.nbdev]
+safepyrun = "safepyrun._modidx:d"
+
+[tool.setuptools.dynamic]
+version = {attr = "safepyrun.__version__"}
+
+[tool.setuptools.packages.find]
+include = ["safepyrun"]
+
+[tool.nbdev]
