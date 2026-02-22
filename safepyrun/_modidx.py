@@ -26,5 +26,4 @@ d = { 'settings': { 'branch': 'main',
                                 'safepyrun.core._run_python': ('core.html#_run_python', 'safepyrun/core.py'),
                                 'safepyrun.core._safe_getattr': ('core.html#_safe_getattr', 'safepyrun/core.py'),
                                 'safepyrun.core.allow': ('core.html#allow', 'safepyrun/core.py'),
-                                'safepyrun.core.docs': ('core.html#docs', 'safepyrun/core.py'),
                                 'safepyrun.core.safe_type': ('core.html#safe_type', 'safepyrun/core.py')}}}
