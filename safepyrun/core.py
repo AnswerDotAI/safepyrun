@@ -49,7 +49,7 @@ def allow(*c):
 # %% ../nbs/00_core.ipynb #eb580254
 def chk_dest(p, ok_dests):
     resolved = str(Path(p).resolve())
-    if not any(resolved.startswith(str(Path(d).resolve())) for d in ok_dests):
+    if not any(resolved == (rd := str(Path(d).resolve())) or resolved.startswith(rd + '/') for d in ok_dests):
         raise PermissionError(f"Write to '{p}' not allowed; permitted: {ok_dests}")
 
 # %% ../nbs/00_core.ipynb #8146b916
@@ -175,12 +175,14 @@ async def _run_python(code:str, g=None, ok_dests=None):
         for k,v in g.items() if not k.startswith('_')}
     def unpack(a,*args): return list(a)
     builtins = dict(all_builtins)
-    if ok_dests is not None: builtins['open'] = _safe_open(ok_dests)
+    if ok_dests is not None:
+        safe_open = _safe_open(ok_dests)
+        builtins['open'] = safe_open
     rg = dict(__builtins__=builtins, _getattr_=_make_safe_getattr(ok_dests),
               _getitem_=lambda o,k: o[k], _getiter_=iter, _print_=_DirectPrint, _print=_DirectPrint(),
               _unpack_sequence_=unpack, _iter_unpack_sequence_=unpack,
               enumerate=enumerate, sorted=sorted, reversed=reversed, max=max, min=min, **tools)
-    if ok_dests is not None: rg['open'] = _safe_open(ok_dests)
+    if ok_dests is not None: rg['open'] = safe_open
     loc,errs = {},[]
     sout, serr = StringIO(), StringIO()
     async def run(src, is_exec=True):
