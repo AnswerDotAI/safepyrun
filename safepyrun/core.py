@@ -169,7 +169,7 @@ class SafeTransformer(RestrictingNodeTransformer):
         else: raise NotImplementedError(f"Unknown ctx type: {type(node.ctx)}")
 
 # %% ../nbs/00_core.ipynb #55cc6157
-async def _run_python(code:str, g=None, ok_dests=None):
+async def _run_python(code:str, g=None, ok_dests=None, concise=True):
     _ok = __llmtools__|__pytools__
     tools = {k:(v if not callable(v) or _callable_ok(k,v,_ok) else _Uncallable(v,k))
         for k,v in g.items() if not k.startswith('_')}
@@ -201,6 +201,9 @@ async def _run_python(code:str, g=None, ok_dests=None):
         if (err := serr.getvalue()): d['stderr'] = err
         if errs: d['errors'] = '\n'.join(errs)
         if res is not None: d['result'] = res
+        if concise and len(d)==1: # only one part
+            if 'stdout' in d: return d['stdout']
+            if 'result' in d: return d['result']
         return d or None
     tree = ast.parse(code)
     with contextlib.redirect_stdout(sout), contextlib.redirect_stderr(serr), warnings.catch_warnings():
@@ -224,7 +227,8 @@ class RunPython:
     @property
     def __doc__(self):
         tools = ', '.join(sorted(__llmtools__|__pytools__))
-        return f"""Execute restricted Python with access to LLM tools, returning last expression.
+        return f"""Execute restricted Python with access to LLM tools, returning dict of last expression, stdout, stderr, and errors.
+            If `concise`, then if just 'stdout' or 'result' returned, return only that without creating a dict.
             `import` works in the usual way. All non-callable globals and non-callable attrs are usable.
             Callable globals are also usable if their name ends with `_` (but not `_`-prefixed).
             - This is an easy way for users to expose extra functions: `def my_helper_(...)`
@@ -237,8 +241,8 @@ class RunPython:
             Examples: `len([1,2,3])` (builtin); `add_msg(content="hi")` (tool); `df.shape` (non-callable attr);
             `[x**2 for x in range(5)]` (last expression returned); `sorted(my_dict.items())` (builtin + non-callable attr)"""
 
-    async def __call__(self, code:str):
-        return await _run_python(code, g=self.g, ok_dests=self.ok_dests)
+    async def __call__(self, code:str, concise:bool=True):
+        return await _run_python(code, g=self.g, ok_dests=self.ok_dests, concise=concise)
 
 # %% ../nbs/00_core.ipynb #2303931f
 def safe_type(o:object):
