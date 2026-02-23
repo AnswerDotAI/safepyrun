@@ -28,18 +28,15 @@ When an LLM needs to run code on your behalf, the standard advice is to
 sandbox it in a container. The problem is that the whole reason you want
 the LLM running code is so it can interact with your environment – your
 files, your libraries, your running processes, your data. A
-containerised sandbox either can’t access any of that (making it largely
-useless) or requires complex volume mounts and dependency mirroring that
-recreate your environment inside the container (which is fragile and
-slow).
+containerised sandbox either can’t access any of that, or it requires
+complex volume mounts and dependency mirroring that recreate your
+environment inside the container.
 
-The obvious alternative is to just `exec` the LLM’s code directly in
-your process. This gives full access to everything, but “everything”
-includes
+You could just `exec` the LLM’s code directly in your process, which
+would give full access to everything… but “everything” includes
 [`shutil.rmtree`](https://docs.python.org/3/library/shutil.html#shutil.rmtree),
 [`os.remove`](https://docs.python.org/3/library/os.html#os.remove),
-`subprocess.run("rm -rf /")`, and arbitrary network exfiltration. One
-hallucinated cleanup step and you’ve lost files.
+`subprocess.run("rm -rf /")`, etc!
 
 safepyrun takes a middle path. It runs the LLM’s code in your real
 Python process, with access to your real objects, but interposes an
@@ -48,9 +45,7 @@ default list covers a large and useful subset of the standard library
 (string manipulation, math, JSON parsing, path inspection, data
 structures, and so on) while excluding anything that writes to the
 filesystem, spawns processes, or modifies system state. You can extend
-the list for your own functions with a single
-[`allow()`](https://AnswerDotAI.github.io/safepyrun/core.html#allow)
-call.
+the list for your own functions.
 
 The mechanism behind safepyrun is
 [RestrictedPython](https://restrictedpython.readthedocs.io/), a
@@ -68,9 +63,7 @@ Because a lot of modern Python code (and many LLM tool-calling
 frameworks) is async, safepyrun also depends on
 [restrictedpython-async](https://github.com/AnswerDotAI/restrictedpython-async),
 which extends RestrictedPython to handle `await`, `async for`, and
-`async with` expressions. Without this, any code that needs to call an
-async function (which is increasingly common) would be blocked by the
-sandbox.
+`async with` expressions.
 
 A lot of the online discussion around RestrictedPython suggests it’s not
 really useful for sandboxing, and that’s true if you’re trying to block
@@ -273,6 +266,8 @@ await pyrun('def clean_(s): return s.strip().lower()')
 await pyrun('clean_("  Hello World  ")')
 ```
 
+    {'result': 'hello world'}
+
 The exported symbols are real objects in your namespace, not just
 available inside the sandbox. This works for variables too, not just
 functions:
@@ -306,3 +301,225 @@ await asyncio.gather(fetch(1), fetch(2), fetch(3))
 ```
 
     {'result': [10, 20, 30]}
+
+## Writable path permissions
+
+By default,
+[`RunPython`](https://AnswerDotAI.github.io/safepyrun/core.html#runpython)
+blocks all filesystem writes. To enable controlled writing, pass
+`ok_dests` — a list of directory prefixes where writes are permitted.
+Writing to an allowed destination works normally, but writing anywhere
+else raises `PermissionError`:
+
+``` python
+pyrun2 = RunPython(ok_dests=['/tmp'])
+```
+
+``` python
+from pathlib import Path
+```
+
+``` python
+await pyrun2("Path('/tmp/test_write.txt').write_text('hello')")
+```
+
+    {'result': 5}
+
+``` python
+try: await pyrun2("Path('/etc/evil.txt').write_text('bad')")
+except PermissionError as e: print(f'Blocked: {e}')
+```
+
+    Blocked: Write to '/etc/evil.txt' not allowed; permitted: ['/tmp']
+
+The same permission checking applies to `open()` in write mode, not just
+`Path` methods:
+
+``` python
+await pyrun2("open('/tmp/test_open.txt', 'w').write('hi')")
+```
+
+    {'result': 2}
+
+``` python
+try: await pyrun2("open('/root/bad.txt', 'w')")
+except PermissionError as e: print(f'Blocked: {e}')
+```
+
+    Blocked: Write to '/root/bad.txt' not allowed; permitted: ['/tmp']
+
+Read access is unaffected — only writes are gated:
+
+``` python
+await pyrun2("open('/etc/passwd', 'r').read(10)")
+```
+
+    {'result': '##\n# User '}
+
+Higher-level file operations like
+[`shutil.copy`](https://docs.python.org/3/library/shutil.html#shutil.copy)
+are also intercepted. The destination is checked against `ok_dests`:
+
+``` python
+await pyrun2("import shutil; shutil.copy('/tmp/test_write.txt', '/tmp/test_copy.txt')")
+```
+
+    {'result': '/tmp/test_copy.txt'}
+
+``` python
+try: await pyrun2("import shutil; shutil.copy('/tmp/test_write.txt', '/root/bad.txt')")
+except PermissionError as e: print(f'Blocked: {e}')
+```
+
+    Blocked: Write to '/root/bad.txt' not allowed; permitted: ['/tmp']
+
+Without `ok_dests`, the default
+[`RunPython`](https://AnswerDotAI.github.io/safepyrun/core.html#runpython)
+instance blocks all write operations entirely — `Path.write_text` isn’t
+even callable:
+
+``` python
+try: await pyrun("Path('/tmp/test.txt').write_text('nope')")
+except AttributeError as e: print(f'No ok_dests: {e}')
+```
+
+    No ok_dests: Cannot access callable: write_text
+
+You can use `'.'` to allow writes relative to the current working
+directory. Path traversal attempts (`../`, `subdir/../../`) are detected
+and blocked, so the sandbox can’t escape the permitted directory:
+
+``` python
+pyrun_cwd = RunPython(ok_dests=['.'])
+
+# Writing to cwd should work
+await pyrun_cwd("Path('test_cwd_ok.txt').write_text('hello')")
+```
+
+    {'result': 5}
+
+``` python
+Path('test_cwd_ok.txt').unlink(missing_ok=True)
+```
+
+Writing to /tmp is blocked here since it’s not in ok_dests:
+
+``` python
+try: await pyrun_cwd("Path('/tmp/nope.txt').write_text('bad')")
+except PermissionError: print("Blocked /tmp as expected")
+```
+
+    Blocked /tmp as expected
+
+Parent traversal is blocked if it resolves to a location outside
+ok_dests:
+
+``` python
+try: await pyrun_cwd("Path('../escape.txt').write_text('bad')")
+except PermissionError: print("Blocked ../ as expected")
+```
+
+    Blocked ../ as expected
+
+### Write policies
+
+When `ok_dests` is set, safepyrun uses write policies to determine how
+to validate each callable’s destination arguments. Three built-in policy
+classes cover common patterns: checking a positional or keyword argument
+([`PosWritePolicy`](https://AnswerDotAI.github.io/safepyrun/core.html#poswritepolicy)),
+checking the `Path` object itself
+([`PathWritePolicy`](https://AnswerDotAI.github.io/safepyrun/core.html#pathwritepolicy)),
+and checking `open()` calls only when the mode is writable
+([`OpenWritePolicy`](https://AnswerDotAI.github.io/safepyrun/core.html#openwritepolicy)).
+You can also subclass
+[`WritePolicy`](https://AnswerDotAI.github.io/safepyrun/core.html#writepolicy)
+to create custom checks.
+
+The simplest,
+[`PosWritePolicy`](https://AnswerDotAI.github.io/safepyrun/core.html#poswritepolicy),
+checks a specific positional or keyword argument against the allowed
+destinations. Here, position 1 (or keyword `dst`) is validated — writing
+to `/tmp` is allowed, but `/root` is blocked:
+
+``` python
+pp = PosWritePolicy(1, 'dst')
+pp.check(None, ['src', '/tmp/ok'], {}, ['/tmp'])
+try: pp.check(None, ['src', '/root/bad'], {}, ['/tmp'])
+except PermissionError: print("PosWritePolicy correctly blocked /root/bad")
+```
+
+    PosWritePolicy correctly blocked /root/bad
+
+You can create custom write policies by subclassing
+[`WritePolicy`](https://AnswerDotAI.github.io/safepyrun/core.html#writepolicy)
+and implementing the `check` method. For example, here we show a policy
+that only allows writes to files with specific extensions — useful if
+you want the LLM to create `.csv` or `.json` files but not arbitrary
+scripts.
+
+The `check` signature receives `(obj, args, kwargs, ok_dests)` where
+`obj` is the object the method is called on (e.g. a `Path` instance),
+`args`/`kwargs` are the method’s arguments, and `ok_dests` is the list
+of permitted directory prefixes. Calling
+[`chk_dest`](https://AnswerDotAI.github.io/safepyrun/core.html#chk_dest)
+first handles the directory check, then the custom logic adds the
+extension constraint on top.
+
+``` python
+class ExtWritePolicy(WritePolicy):
+    "Only allow writes to paths with specified extensions"
+    def __init__(self, exts): self.exts = set(exts)
+    def check(self, obj, args, kwargs, ok_dests):
+        chk_dest(obj, ok_dests)
+        if Path(str(obj)).suffix not in self.exts: raise PermissionError(f"{Path(str(obj)).suffix!r} not allowed")
+```
+
+``` python
+ep = ExtWritePolicy(['.csv', '.json'])
+ep.check(Path('/tmp/data.csv'), [], {}, ['/tmp'])
+try: ep.check(Path('/tmp/script.sh'), [], {}, ['/tmp'])
+except PermissionError: print("ExtWritePolicy correctly blocked .sh")
+```
+
+    ExtWritePolicy correctly blocked .sh
+
+You can register it with
+[`allow_write`](https://AnswerDotAI.github.io/safepyrun/core.html#allow_write)
+just like the built-in policies. The key is the `ClassName.method`
+string the sandbox will intercept:
+
+``` python
+allow_write({'Path.write_text': ExtWritePolicy(['.csv', '.json', '.txt'])})
+```
+
+## Configuration
+
+`safepyrun` loads an optional user config from
+`{xdg_config_home}/safepyrun/config.py` at import time, after all
+defaults are registered. This lets you permanently extend the sandbox
+allowlists without modifying the package. The config file is executed
+with all `safepyrun.core` globals already available, so no imports are
+needed. This includes
+[`allow`](https://AnswerDotAI.github.io/safepyrun/core.html#allow),
+[`allow_write`](https://AnswerDotAI.github.io/safepyrun/core.html#allow_write),
+[`WritePolicy`](https://AnswerDotAI.github.io/safepyrun/core.html#writepolicy),
+[`PathWritePolicy`](https://AnswerDotAI.github.io/safepyrun/core.html#pathwritepolicy),
+[`PosWritePolicy`](https://AnswerDotAI.github.io/safepyrun/core.html#poswritepolicy),
+[`OpenWritePolicy`](https://AnswerDotAI.github.io/safepyrun/core.html#openwritepolicy),
+and all standard library modules already imported by the module.
+
+Example `~/.config/safepyrun/config.py` (Linux) or
+`~/Library/Application Support/safepyrun/config.py` (macOS):
+
+``` python
+import pandas
+
+# Add pandas tools
+allow({pandas.DataFrame: ['head', 'describe', 'info', 'shape']})
+
+# Allow pandas to write CSV to ~/data
+allow_write({'DataFrame.to_csv': PosWritePolicy(0, 'path_or_buf')})
+```
+
+If the config file has errors, a warning is emitted and the defaults
+remain intact.
