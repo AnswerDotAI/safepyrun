@@ -2,6 +2,13 @@
 
 <!-- do not remove -->
 
+## 0.0.5
+
+### New Features
+
+- Add ContextVar fallback for asyncio.gather, `find_var` helper, `_apply_` for star-unpacking ([#3](https://github.com/AnswerDotAI/safepyrun/issues/3))
+
+
 ## 0.0.4
 
 ### New Features
