@@ -236,8 +236,7 @@ async def _run_python(code:str, g=None, ok_dests=None, concise=True):
 # %% ../nbs/00_core.ipynb #4b971b78
 class RunPython:
     def __init__(self, g=None, sentinel=None, ok_dests=None):
-        if not g: g = _find_frame_dict(sentinel)
-        self.g,self.ok_dests = g,ok_dests
+        self.g, self.ok_dests, self.sentinel = g, ok_dests, sentinel
 
     @property
     def __doc__(self):
@@ -257,7 +256,8 @@ class RunPython:
             `[x**2 for x in range(5)]` (last expression returned); `sorted(my_dict.items())` (builtin + non-callable attr)"""
 
     async def __call__(self, code:str, concise:bool=True):
-        return await _run_python(code, g=self.g, ok_dests=self.ok_dests, concise=concise)
+        if not self.g: self.g = _find_frame_dict(self.sentinel)
+        return await _run_python(code, g=self.g or globals(), ok_dests=self.ok_dests, concise=concise)
 
 # %% ../nbs/00_core.ipynb #2303931f
 def safe_type(o:object):
