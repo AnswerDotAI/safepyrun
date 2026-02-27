@@ -118,6 +118,7 @@ def _safe_open(ok_dests):
 # %% ../nbs/00_core.ipynb #12f3bde3
 all_builtins = safe_builtins | utility_builtins | limited_builtins | async_builtins | dict(
     dict=dict, list=list, set=set, tuple=tuple, frozenset=frozenset,
+    iter=iter, next=next,
     __import__=__import__
 )
 
