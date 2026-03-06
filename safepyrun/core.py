@@ -295,7 +295,7 @@ allow({
         'zfill', 'center', 'ljust', 'rjust', 'maketrans', 'translate', 'casefold', 'partition', 'rpartition'],
     bytes: ['decode', 'fromhex', 'hex'],
     int: ['to_bytes', 'from_bytes', 'bit_length'],
-    Path: ['read_text', 'glob', 'iterdir', 'exists', 'read_bytes', 'is_file', 'is_dir', 'stat', 'resolve',
+    Path: ['expanduser', 'read_text', 'glob', 'iterdir', 'exists', 'read_bytes', 'is_file', 'is_dir', 'stat', 'resolve',
         'with_suffix', 'with_name', 'relative_to', 'match', 'joinpath'],
     asyncio: ['gather'], copy: ['deepcopy'], httpx: ['get', 'options'],
     itertools: ['chain', 'islice', 'groupby', 'product', 'permutations', 'combinations', 'accumulate', 'starmap', 'zip_longest',
