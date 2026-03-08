@@ -2,6 +2,14 @@
 
 <!-- do not remove -->
 
+## 0.0.6
+
+### New Features
+
+- Add expanduser to allowed Path methods ([#6](https://github.com/AnswerDotAI/safepyrun/pull/6)), thanks to [@ncoop57](https://github.com/ncoop57)
+- Add iter and next to sandbox builtins ([#4](https://github.com/AnswerDotAI/safepyrun/pull/4)), thanks to [@ncoop57](https://github.com/ncoop57)
+
+
 ## 0.0.5
 
 ### New Features
