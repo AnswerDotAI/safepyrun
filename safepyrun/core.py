@@ -249,7 +249,10 @@ def create_magic(shell=None, pyrun=None):
     "Create magic"
     if not shell: shell = get_ipython()
     if not pyrun: pyrun = RunPython()
-    def f(line, cell=None): return pyrun(cell)
+    def f(line, cell=None):
+        if line=='-o': return pyrun
+        if not cell: return
+        return pyrun(cell)
     shell.register_magic_function(f, 'line_cell', 'py')
 
 # %% ../nbs/00_core.ipynb #5da01116
