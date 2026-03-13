@@ -2,6 +2,13 @@
 
 <!-- do not remove -->
 
+## 0.0.8
+
+### New Features
+
+- Simplify `_run_python` to return last expr directly, add %%py cell magic, matplotlib support, and IPython display tools ([#7](https://github.com/AnswerDotAI/safepyrun/issues/7))
+
+
 ## 0.0.7
 
 ### New Features
