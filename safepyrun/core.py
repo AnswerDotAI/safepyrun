@@ -2,7 +2,8 @@
 
 # %% auto #0
 __all__ = ['all_builtins', 'ALLOWED_DUNDERS', 'find_var', 'allow', 'chk_dest', 'WritePolicy', 'PosWritePolicy', 'PathWritePolicy',
-           'OpenWritePolicy', 'allow_write', 'SafeTransformer', 'RunPython', 'safe_type']
+           'OpenWritePolicy', 'allow_write', 'SafeTransformer', 'RunPython', 'create_magic', 'safe_type',
+           'load_ipython_extension']
 
 # %% ../nbs/00_core.ipynb #468aa264
 from fastcore.utils import *
@@ -16,10 +17,12 @@ import zlib,unicodedata,binascii,enum,secrets,pickle,contextlib,types,keyword,ht
 import heapq, bisect, html, struct, decimal, fractions, pprint, fnmatch, base64
 import random, statistics, difflib, csv, string, textwrap, hashlib, copy, datetime as dt_mod
 import xml.etree.ElementTree as ET,ipaddress,colorsys,cmath,traceback,sys,shutil
+import matplotlib.pyplot as plt
 from datetime import datetime
 from urllib.parse import quote,unquote,urlencode
 from io import StringIO,BytesIO
 from collections import Counter,deque
+from IPython.display import display,HTML,Markdown,Image,Pretty,SVG
 
 # %% ../nbs/00_core.ipynb #f178e529
 from fastcore.imports import __llmtools__
@@ -183,7 +186,7 @@ class SafeTransformer(RestrictingNodeTransformer):
         else: raise NotImplementedError(f"Unknown ctx type: {type(node.ctx)}")
 
 # %% ../nbs/00_core.ipynb #55cc6157
-async def _run_python(code:str, g=None, ok_dests=None, concise=True):
+async def _run_python(code:str, g=None, ok_dests=None):
     _rp_globals.set(g)
     _ok = __llmtools__|__pytools__
     tools = {k:(v if not callable(v) or _callable_ok(k,v,_ok) else _Uncallable(v,k))
@@ -199,40 +202,23 @@ async def _run_python(code:str, g=None, ok_dests=None, concise=True):
               _unpack_sequence_=unpack, _iter_unpack_sequence_=unpack,
               enumerate=enumerate, sorted=sorted, reversed=reversed, max=max, min=min, **tools)
     if ok_dests is not None: rg['open'] = safe_open
-    loc,errs = {},[]
-    sout, serr = StringIO(), StringIO()
+    loc = {}
     async def run(src, is_exec=True):
         try:
             comp = compile_restricted(src, '<tool>', 'exec' if is_exec else 'eval', policy=SafeTransformer)
-            res = eval(comp, rg, loc)
-            if inspect.iscoroutine(res): res = await res
-            return res
-        except SyntaxError as e: errs.append(f'SyntaxError: {e}')
-        except NameError as e: errs.append(f'`{e.name}` is not available in this sandbox; ask the user to add it to the available tools')
-    def _export(): g.update({k:v for k,v in loc.items() if k.endswith('_') and not k.startswith('_')})
-    def _result(res=None):
-        _export()
-        d = {}
-        if (out := sout.getvalue()): d['stdout'] = out
-        if (err := serr.getvalue()): d['stderr'] = err
-        if errs: d['errors'] = '\n'.join(errs)
-        if res is not None: d['result'] = res
-        if concise and len(d)==1: # only one part
-            if 'stdout' in d: return d['stdout']
-            if 'result' in d: return d['result']
-        return d or None
+            r = eval(comp, rg, loc)
+            return (await r) if inspect.isawaitable(r) else r
+        except NameError as e: raise NameError(f'`{e.name}` is has not been added to this sandbox yet') from None
     tree = ast.parse(code)
-    with contextlib.redirect_stdout(sout), contextlib.redirect_stderr(serr), warnings.catch_warnings():
-        warnings.filterwarnings('ignore', category=SyntaxWarning)
-        if tree.body and isinstance(tree.body[-1], ast.Expr):
-            last = tree.body.pop()
-            if tree.body:
-                await run(ast.unparse(ast.Module(tree.body, [])))
-                if errs: return _result()
-            res = await run(ast.unparse(ast.Expression(last.value)), False)
-            return _result(res)
-        await run(code)
-        return _result()
+    warnings.filterwarnings('ignore', category=SyntaxWarning)
+    res = None
+    if tree.body and isinstance(tree.body[-1], ast.Expr):
+        last = tree.body.pop()
+        if tree.body: await run(ast.unparse(ast.Module(tree.body, [])))
+        res = await run(ast.unparse(ast.Expression(last.value)), False)
+    else: await run(code)
+    g.update({k:v for k,v in loc.items() if k.endswith('_') and not k.startswith('_')})
+    return res
 
 # %% ../nbs/00_core.ipynb #4b971b78
 class RunPython:
@@ -243,8 +229,7 @@ class RunPython:
     @property
     def __doc__(self):
         tools = ', '.join(sorted(__llmtools__|__pytools__))
-        return f"""Execute restricted Python with access to LLM tools, returning dict of last expression, stdout, stderr, and errors.
-            If `concise`, then if just 'stdout' or 'result' returned, return only that without creating a dict.
+        return f"""Execute restricted Python with access to LLM tools, returning last expression.
             `import` works in the usual way. All non-callable globals and non-callable attrs are usable.
             Callable globals are also usable if their name ends with `_` (but not `_`-prefixed).
             - This is an easy way for users to expose extra functions: `def my_helper_(...)`
@@ -257,8 +242,18 @@ class RunPython:
             Examples: `len([1,2,3])` (builtin); `add_msg(content="hi")` (tool); `df.shape` (non-callable attr);
             `[x**2 for x in range(5)]` (last expression returned); `sorted(my_dict.items())` (builtin + non-callable attr)"""
 
-    async def __call__(self, code:str, concise:bool=True):
-        return await _run_python(code, g=self.g, ok_dests=self.ok_dests, concise=concise)
+    async def __call__(self, code:str): return await _run_python(code, g=self.g, ok_dests=self.ok_dests)
+
+# %% ../nbs/00_core.ipynb #9105f690
+def create_magic(shell=None, pyrun=None):
+    "Create magic"
+    if not shell: shell = get_ipython()
+    if not pyrun: pyrun = RunPython()
+    def f(line, cell=None): return pyrun(cell)
+    shell.register_magic_function(f, 'line_cell', 'py')
+
+# %% ../nbs/00_core.ipynb #5da01116
+create_magic()
 
 # %% ../nbs/00_core.ipynb #2303931f
 def safe_type(o:object):
@@ -308,7 +303,7 @@ allow({
         'getitem', 'mod', 'eq', 'ne', 'lt', 'gt', 'or_', 'and_', 'not_', 'pow', 'floordiv', 'xor'],
     frozenset: ['intersection', 'union', 'difference', 'symmetric_difference', 'issubset', 'issuperset', 'copy'],
     StringIO: _io_meths, BytesIO: _io_meths,
-    }, 'urlencode', 'quote', 'unquote', 'string', 'safe_type'
+    }, 'urlencode', 'quote', 'unquote', 'string', 'safe_type', 'display','HTML','Markdown','Image','Pretty','SVG'
 )
 
 # %% ../nbs/00_core.ipynb #67b9faa7
@@ -349,6 +344,7 @@ allow({
     cmath: ['phase', 'polar', 'rect', 'sqrt'],
     decimal: ['Decimal'], fractions: ['Fraction'],
     uuid: ['uuid4'], pprint: ['pformat'], types: ['SimpleNamespace'],
+    plt:['plot','figure','axis'],
     traceback: ['format_exc'], sys: ['getsizeof'], warnings: ['warn'],
 })
 
@@ -370,3 +366,31 @@ _cfg_py = xdg_config_home() / 'safepyrun' / 'config.py'
 if _cfg_py.exists():
     try: exec(_cfg_py.read_text(), {k:v for k,v in globals().items() if not k.startswith('_')})
     except Exception as e: warnings.warn(f"Failed to load {_cfg_py}: {e}")
+
+# %% ../nbs/00_core.ipynb #e67f14ce
+from matplotlib.figure import Figure
+from matplotlib.axes import Axes
+from matplotlib.axis import Axis
+from matplotlib.spines import Spine, SpinesProxy
+
+# %% ../nbs/00_core.ipynb #1f5e0d36
+allow({
+    plt: ['subplots', 'show', 'savefig', 'tight_layout', 'subplot', 'bar', 'scatter', 'hist',
+        'xlabel', 'ylabel', 'title', 'legend', 'grid', 'xlim', 'ylim', 'colorbar', 'imshow'],
+    Figure: ['savefig', 'tight_layout', 'set_size_inches', 'add_subplot', 'suptitle'],
+    Axes: ['plot', 'bar', 'barh', 'scatter', 'hist', 'set_xlabel', 'set_ylabel', 'set_title',
+        'legend', 'grid', 'set_xlim', 'set_ylim', 'tick_params', 'set_xticks', 'set_yticks',
+        'annotate', 'text', 'axhline', 'axvline', 'fill_between', 'twinx', 'imshow', 'pie',
+        'boxplot', 'errorbar', 'stem', 'loglog', 'semilogx', 'semilogy', 'set_xscale', 'set_yscale'],
+    Axis: ['set_major_formatter', 'set_minor_formatter', 'set_major_locator', 'set_minor_locator'],
+    Spine: ['set_visible'], SpinesProxy: ['set_visible'],
+})
+
+allow_write({
+    'Figure.savefig': PosWritePolicy(0, 'fname'),
+    'matplotlib.pyplot.savefig': PosWritePolicy(0, 'fname'),
+})
+
+# %% ../nbs/00_core.ipynb #8d1cb417
+# Not really needed - just importing the module is enough
+def load_ipython_extension(ip): create_magic(ip)
