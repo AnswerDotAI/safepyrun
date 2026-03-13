@@ -2,7 +2,7 @@
 
 # %% auto #0
 __all__ = ['all_builtins', 'ALLOWED_DUNDERS', 'find_var', 'allow', 'chk_dest', 'WritePolicy', 'PosWritePolicy', 'PathWritePolicy',
-           'OpenWritePolicy', 'allow_write', 'SafeTransformer', 'RunPython', 'create_magic', 'safe_type',
+           'OpenWritePolicy', 'allow_write', 'SafeTransformer', 'RunPython', 'create_pyrun_magic', 'safe_type',
            'load_ipython_extension']
 
 # %% ../nbs/00_core.ipynb #468aa264
@@ -245,7 +245,7 @@ class RunPython:
     async def __call__(self, code:str): return await _run_python(code, g=self.g, ok_dests=self.ok_dests)
 
 # %% ../nbs/00_core.ipynb #9105f690
-def create_magic(shell=None, pyrun=None):
+def create_pyrun_magic(shell=None, pyrun=None):
     "Create magic"
     if not shell: shell = get_ipython()
     if not pyrun: pyrun = RunPython()
@@ -254,9 +254,6 @@ def create_magic(shell=None, pyrun=None):
         if not cell: return
         return pyrun(cell)
     shell.register_magic_function(f, 'line_cell', 'py')
-
-# %% ../nbs/00_core.ipynb #5da01116
-create_magic()
 
 # %% ../nbs/00_core.ipynb #2303931f
 def safe_type(o:object):
@@ -396,4 +393,4 @@ allow_write({
 
 # %% ../nbs/00_core.ipynb #8d1cb417
 # Not really needed - just importing the module is enough
-def load_ipython_extension(ip): create_magic(ip)
+def load_ipython_extension(ip): create_pyrun_magic(ip)

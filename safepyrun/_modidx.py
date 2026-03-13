@@ -42,7 +42,7 @@ d = { 'settings': { 'branch': 'main',
                                 'safepyrun.core.allow': ('core.html#allow', 'safepyrun/core.py'),
                                 'safepyrun.core.allow_write': ('core.html#allow_write', 'safepyrun/core.py'),
                                 'safepyrun.core.chk_dest': ('core.html#chk_dest', 'safepyrun/core.py'),
-                                'safepyrun.core.create_magic': ('core.html#create_magic', 'safepyrun/core.py'),
+                                'safepyrun.core.create_pyrun_magic': ('core.html#create_pyrun_magic', 'safepyrun/core.py'),
                                 'safepyrun.core.find_var': ('core.html#find_var', 'safepyrun/core.py'),
                                 'safepyrun.core.load_ipython_extension': ('core.html#load_ipython_extension', 'safepyrun/core.py'),
                                 'safepyrun.core.safe_type': ('core.html#safe_type', 'safepyrun/core.py')}}}
