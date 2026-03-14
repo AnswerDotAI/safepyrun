@@ -54,12 +54,20 @@ def find_var(var:str):
 
 # %% ../nbs/00_core.ipynb #947e6c21
 __pytools__ = {'pyrun'}
+__pytools_cls__ = collections.defaultdict(set)
+
+def _cls_ok(obj, name):
+    for o in [obj] + list(type(obj).__mro__):
+        # obj may be unhashable (e.g. dict, list, ndarray) but modules/classes are valid keys
+        try: s = __pytools_cls__.get(o)
+        except TypeError: continue
+        if s and (... in s or name in s): return True
+    return False
 
 def allow(*c):
     for o in c:
         if isinstance(o, dict):
-            __pytools__.update({k.__name__ for k in o})
-            __pytools__.update({f'{k.__name__}.{m}' for k,v in o.items() for m in v})
+            for k,v in o.items(): __pytools_cls__[k].update(listify(v))
         else: __pytools__.add(o)
 
 # %% ../nbs/00_core.ipynb #eb580254
@@ -137,7 +145,7 @@ def _make_safe_getattr(ok_dests=None):
             if ok_dests is not None:
                 for k in keys:
                     if k in __pytools_write__: return _WriteChecked(obj, val, __pytools_write__[k], ok_dests)
-            if not any(k in (__llmtools__|__pytools__) for k in keys): raise AttributeError(f"Cannot access callable: {name}")
+            if not (_cls_ok(obj, name) or any(k in (__llmtools__|__pytools__) for k in keys)): raise AttributeError(f"Cannot access callable: {name}")
         return val
     return _safe_getattr
 
@@ -158,8 +166,14 @@ class _Uncallable:
 
 def _callable_ok(k, v, _ok):
     if k.endswith('_') or k in _ok: return True
+    if v in __pytools_cls__: return True
     mod,qn = getattr(v, '__module__', None), getattr(v, '__qualname__', None)
-    return bool(mod and qn and f"{mod}.{qn}" in _ok)
+    if mod and qn:
+        m = sys.modules.get(mod)
+        if m and _cls_ok(m, qn): return True
+        return f"{mod}.{qn}" in _ok
+    return False
+
 
 # %% ../nbs/00_core.ipynb #3e4ede6c
 ALLOWED_DUNDERS = {'__name__', '__module__', '__doc__', '__qualname__', '__file__'}
@@ -392,5 +406,7 @@ allow_write({
 })
 
 # %% ../nbs/00_core.ipynb #8d1cb417
-# Not really needed - just importing the module is enough
-def load_ipython_extension(ip): create_pyrun_magic(ip)
+def load_ipython_extension(ip):
+    ns = ip.user_ns
+    ns['pyrun'] = pyrun = RunPython()
+    create_pyrun_magic(ip, pyrun)
