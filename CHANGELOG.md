@@ -2,6 +2,13 @@
 
 <!-- do not remove -->
 
+## 0.0.11
+
+### New Features
+
+- Add MRO check for callable whitelist and handle tuple SyntaxError messages ([#11](https://github.com/AnswerDotAI/safepyrun/issues/11))
+
+
 ## 0.0.10
 
 ### New Features
