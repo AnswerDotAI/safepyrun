@@ -2,6 +2,13 @@
 
 <!-- do not remove -->
 
+## 0.0.12
+
+### New Features
+
+- Add `allow_matplotlib` ([#12](https://github.com/AnswerDotAI/safepyrun/issues/12))
+
+
 ## 0.0.11
 
 ### New Features
