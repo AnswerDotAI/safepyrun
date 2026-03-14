@@ -3,7 +3,7 @@
 # %% auto #0
 __all__ = ['all_builtins', 'ALLOWED_DUNDERS', 'find_var', 'allow', 'chk_dest', 'WritePolicy', 'PosWritePolicy', 'PathWritePolicy',
            'OpenWritePolicy', 'allow_write', 'SafeTransformer', 'RunPython', 'create_pyrun_magic', 'safe_type',
-           'load_ipython_extension']
+           'allow_matplotlib', 'load_ipython_extension']
 
 # %% ../nbs/00_core.ipynb #468aa264
 from fastcore.utils import *
@@ -17,7 +17,6 @@ import zlib,unicodedata,binascii,enum,secrets,pickle,contextlib,types,keyword,ht
 import heapq, bisect, html, struct, decimal, fractions, pprint, fnmatch, base64
 import random, statistics, difflib, csv, string, textwrap, hashlib, copy, datetime as dt_mod
 import xml.etree.ElementTree as ET,ipaddress,colorsys,cmath,traceback,sys,shutil
-import matplotlib.pyplot as plt
 from datetime import datetime
 from urllib.parse import quote,unquote,urlencode
 from io import StringIO,BytesIO
@@ -361,7 +360,6 @@ allow({
     cmath: ['phase', 'polar', 'rect', 'sqrt'],
     decimal: ['Decimal'], fractions: ['Fraction'],
     uuid: ['uuid4'], pprint: ['pformat'], types: ['SimpleNamespace'],
-    plt:['plot','figure','axis'],
     traceback: ['format_exc'], sys: ['getsizeof'], warnings: ['warn'],
 })
 
@@ -385,28 +383,29 @@ if _cfg_py.exists():
     except Exception as e: warnings.warn(f"Failed to load {_cfg_py}: {e}")
 
 # %% ../nbs/00_core.ipynb #e67f14ce
-from matplotlib.figure import Figure
-from matplotlib.axes import Axes
-from matplotlib.axis import Axis
-from matplotlib.spines import Spine, SpinesProxy
+def allow_matplotlib():
+    import matplotlib.pyplot as plt
+    from matplotlib.figure import Figure
+    from matplotlib.axes import Axes
+    from matplotlib.axis import Axis
+    from matplotlib.spines import Spine, SpinesProxy
 
-# %% ../nbs/00_core.ipynb #1f5e0d36
-allow({
-    plt: ['subplots', 'show', 'savefig', 'tight_layout', 'subplot', 'bar', 'scatter', 'hist',
-        'xlabel', 'ylabel', 'title', 'legend', 'grid', 'xlim', 'ylim', 'colorbar', 'imshow'],
-    Figure: ['savefig', 'tight_layout', 'set_size_inches', 'add_subplot', 'suptitle'],
-    Axes: ['plot', 'bar', 'barh', 'scatter', 'hist', 'set_xlabel', 'set_ylabel', 'set_title',
-        'legend', 'grid', 'set_xlim', 'set_ylim', 'tick_params', 'set_xticks', 'set_yticks',
-        'annotate', 'text', 'axhline', 'axvline', 'fill_between', 'twinx', 'imshow', 'pie',
-        'boxplot', 'errorbar', 'stem', 'loglog', 'semilogx', 'semilogy', 'set_xscale', 'set_yscale'],
-    Axis: ['set_major_formatter', 'set_minor_formatter', 'set_major_locator', 'set_minor_locator'],
-    Spine: ['set_visible'], SpinesProxy: ['set_visible'],
-})
+    allow({
+        plt: ['plot','figure','axis', 'subplots', 'show', 'savefig', 'tight_layout', 'subplot', 'bar', 'scatter', 'hist',
+            'xlabel', 'ylabel', 'title', 'legend', 'grid', 'xlim', 'ylim', 'colorbar', 'imshow'],
+        Figure: ['savefig', 'tight_layout', 'set_size_inches', 'add_subplot', 'suptitle'],
+        Axes: ['plot', 'bar', 'barh', 'scatter', 'hist', 'set_xlabel', 'set_ylabel', 'set_title',
+            'legend', 'grid', 'set_xlim', 'set_ylim', 'tick_params', 'set_xticks', 'set_yticks',
+            'annotate', 'text', 'axhline', 'axvline', 'fill_between', 'twinx', 'imshow', 'pie',
+            'boxplot', 'errorbar', 'stem', 'loglog', 'semilogx', 'semilogy', 'set_xscale', 'set_yscale'],
+        Axis: ['set_major_formatter', 'set_minor_formatter', 'set_major_locator', 'set_minor_locator'],
+        Spine: ['set_visible'], SpinesProxy: ['set_visible'],
+    })
 
-allow_write({
-    'Figure.savefig': PosWritePolicy(0, 'fname'),
-    'matplotlib.pyplot.savefig': PosWritePolicy(0, 'fname'),
-})
+    allow_write({
+        'Figure.savefig': PosWritePolicy(0, 'fname'),
+        'matplotlib.pyplot.savefig': PosWritePolicy(0, 'fname'),
+    })
 
 # %% ../nbs/00_core.ipynb #8d1cb417
 def load_ipython_extension(ip):

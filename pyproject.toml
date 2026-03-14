@@ -23,7 +23,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ['numpy']
+dev = ['numpy', 'matplotlib']
 
 [project.urls]
 Repository = "https://github.com/AnswerDotAI/safepyrun"
