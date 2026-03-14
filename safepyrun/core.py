@@ -167,13 +167,13 @@ class _Uncallable:
 def _callable_ok(k, v, _ok):
     if k.endswith('_') or k in _ok: return True
     if v in __pytools_cls__: return True
+    if any(c in __pytools_cls__ for c in type(v).__mro__): return True
     mod,qn = getattr(v, '__module__', None), getattr(v, '__qualname__', None)
     if mod and qn:
         m = sys.modules.get(mod)
         if m and _cls_ok(m, qn): return True
         return f"{mod}.{qn}" in _ok
     return False
-
 
 # %% ../nbs/00_core.ipynb #3e4ede6c
 ALLOWED_DUNDERS = {'__name__', '__module__', '__doc__', '__qualname__', '__file__'}
@@ -223,6 +223,9 @@ async def _run_python(code:str, g=None, ok_dests=None):
             r = eval(comp, rg, loc)
             return (await r) if inspect.isawaitable(r) else r
         except NameError as e: raise NameError(f'`{e.name}` is has not been added to this sandbox yet') from None
+        except SyntaxError as e:
+            if isinstance(e.msg, tuple): raise SyntaxError('\n'.join(e.msg)) from None
+            raise
     tree = ast.parse(code)
     warnings.filterwarnings('ignore', category=SyntaxWarning)
     res = None
