@@ -2,6 +2,13 @@
 
 <!-- do not remove -->
 
+## 0.0.10
+
+### New Features
+
+- Dynamic class-based allow policies via `__pytools_cls__` defaultdict; support `...` for all methods ([#10](https://github.com/AnswerDotAI/safepyrun/issues/10))
+
+
 ## 0.0.8
 
 ### New Features
