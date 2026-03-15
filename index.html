@@ -1,0 +1,914 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head>
+
+<meta charset="utf-8">
+<meta name="generator" content="quarto-1.8.27">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+
+<meta name="description" content="Safe(ish) running of python code">
+
+<title>safepyrun</title>
+<style>
+code{white-space: pre-wrap;}
+span.smallcaps{font-variant: small-caps;}
+div.columns{display: flex; gap: min(4vw, 1.5em);}
+div.column{flex: auto; overflow-x: auto;}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+ul.task-list{list-style: none;}
+ul.task-list li input[type="checkbox"] {
+  width: 0.8em;
+  margin: 0 0.8em 0.2em -1em; /* quarto-specific, see https://github.com/quarto-dev/quarto-cli/issues/4556 */ 
+  vertical-align: middle;
+}
+/* CSS for syntax highlighting */
+html { -webkit-text-size-adjust: 100%; }
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+  { counter-reset: source-line 0; }
+pre.numberSource code > span
+  { position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+  { content: counter(source-line);
+    position: relative; left: -1em; text-align: right; vertical-align: baseline;
+    border: none; display: inline-block;
+    -webkit-touch-callout: none; -webkit-user-select: none;
+    -khtml-user-select: none; -moz-user-select: none;
+    -ms-user-select: none; user-select: none;
+    padding: 0 4px; width: 4em;
+  }
+pre.numberSource { margin-left: 3em;  padding-left: 4px; }
+div.sourceCode
+  {   }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
+</style>
+
+
+<script src="site_libs/quarto-nav/quarto-nav.js"></script>
+<script src="site_libs/quarto-nav/headroom.min.js"></script>
+<script src="site_libs/clipboard/clipboard.min.js"></script>
+<script src="site_libs/quarto-search/autocomplete.umd.js"></script>
+<script src="site_libs/quarto-search/fuse.min.js"></script>
+<script src="site_libs/quarto-search/quarto-search.js"></script>
+<meta name="quarto:offset" content="./">
+<script src="site_libs/quarto-html/quarto.js" type="module"></script>
+<script src="site_libs/quarto-html/tabsets/tabsets.js" type="module"></script>
+<script src="site_libs/quarto-html/axe/axe-check.js" type="module"></script>
+<script src="site_libs/quarto-html/popper.min.js"></script>
+<script src="site_libs/quarto-html/tippy.umd.min.js"></script>
+<script src="site_libs/quarto-html/anchor.min.js"></script>
+<link href="site_libs/quarto-html/tippy.css" rel="stylesheet">
+<link href="site_libs/quarto-html/quarto-syntax-highlighting-ed96de9b727972fe78a7b5d16c58bf87.css" rel="stylesheet" id="quarto-text-highlighting-styles">
+<script src="site_libs/bootstrap/bootstrap.min.js"></script>
+<link href="site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
+<link href="site_libs/bootstrap/bootstrap-baedc78cbf92349237790bf011c153e8.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+<script id="quarto-search-options" type="application/json">{
+  "location": "navbar",
+  "copy-button": false,
+  "collapse-after": 3,
+  "panel-placement": "end",
+  "type": "overlay",
+  "limit": 50,
+  "keyboard-shortcut": [
+    "f",
+    "/",
+    "s"
+  ],
+  "show-item-context": false,
+  "language": {
+    "search-no-results-text": "No results",
+    "search-matching-documents-text": "matching documents",
+    "search-copy-link-title": "Copy link to search",
+    "search-hide-matches-text": "Hide additional matches",
+    "search-more-match-text": "more match in this document",
+    "search-more-matches-text": "more matches in this document",
+    "search-clear-button-title": "Clear",
+    "search-text-placeholder": "",
+    "search-detached-cancel-button-title": "Cancel",
+    "search-submit-button-title": "Submit",
+    "search-label": "Search"
+  }
+}</script>
+
+
+<link rel="stylesheet" href="styles.css">
+<meta property="og:title" content="safepyrun">
+<meta property="og:description" content="Safe(ish) running of python code">
+<meta property="og:site_name" content="safepyrun">
+<meta name="twitter:title" content="safepyrun">
+<meta name="twitter:description" content="Safe(ish) running of python code">
+<meta name="twitter:card" content="summary">
+</head>
+
+<body class="nav-sidebar floating nav-fixed quarto-light">
+
+<div id="quarto-search-results"></div>
+  <header id="quarto-header" class="headroom fixed-top">
+    <nav class="navbar navbar-expand-lg " data-bs-theme="dark">
+      <div class="navbar-container container-fluid">
+      <div class="navbar-brand-container mx-auto">
+    <a class="navbar-brand" href="./index.html">
+    <span class="navbar-title">safepyrun</span>
+    </a>
+  </div>
+        <div class="quarto-navbar-tools tools-end">
+</div>
+          <div id="quarto-search" class="" title="Search"></div>
+      </div> <!-- /container-fluid -->
+    </nav>
+  <nav class="quarto-secondary-nav">
+    <div class="container-fluid d-flex">
+      <button type="button" class="quarto-btn-toggle btn" data-bs-toggle="collapse" role="button" data-bs-target=".quarto-sidebar-collapse-item" aria-controls="quarto-sidebar" aria-expanded="false" aria-label="Toggle sidebar navigation" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }">
+        <i class="bi bi-layout-text-sidebar-reverse"></i>
+      </button>
+        <nav class="quarto-page-breadcrumbs" aria-label="breadcrumb"><ol class="breadcrumb"><li class="breadcrumb-item"><a href="./index.html">safepyrun</a></li></ol></nav>
+        <a class="flex-grow-1" role="navigation" data-bs-toggle="collapse" data-bs-target=".quarto-sidebar-collapse-item" aria-controls="quarto-sidebar" aria-expanded="false" aria-label="Toggle sidebar navigation" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }">      
+        </a>
+    </div>
+  </nav>
+</header>
+<!-- content -->
+<div id="quarto-content" class="quarto-container page-columns page-rows-contents page-layout-article page-navbar">
+<!-- sidebar -->
+  <nav id="quarto-sidebar" class="sidebar collapse collapse-horizontal quarto-sidebar-collapse-item sidebar-navigation floating overflow-auto">
+    <div class="sidebar-menu-container"> 
+    <ul class="list-unstyled mt-1">
+        <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="./index.html" class="sidebar-item-text sidebar-link active">
+ <span class="menu-text">safepyrun</span></a>
+  </div>
+</li>
+        <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="./core.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">safepython</span></a>
+  </div>
+</li>
+    </ul>
+    </div>
+</nav>
+<div id="quarto-sidebar-glass" class="quarto-sidebar-collapse-item" data-bs-toggle="collapse" data-bs-target=".quarto-sidebar-collapse-item"></div>
+<!-- margin-sidebar -->
+    <div id="quarto-margin-sidebar" class="sidebar margin-sidebar">
+        <nav id="TOC" role="doc-toc" class="toc-active">
+    <h2 id="toc-title">On this page</h2>
+   
+  <ul>
+  <li><a href="#installation" id="toc-installation" class="nav-link active" data-scroll-target="#installation">Installation</a></li>
+  <li><a href="#background" id="toc-background" class="nav-link" data-scroll-target="#background">Background</a></li>
+  <li><a href="#usage" id="toc-usage" class="nav-link" data-scroll-target="#usage">Usage</a>
+  <ul class="collapse">
+  <li><a href="#the-allow-function" id="toc-the-allow-function" class="nav-link" data-scroll-target="#the-allow-function">The <code>allow()</code> function</a></li>
+  <li><a href="#the-_-suffix-convention" id="toc-the-_-suffix-convention" class="nav-link" data-scroll-target="#the-_-suffix-convention">The <code>_</code> suffix convention</a></li>
+  <li><a href="#async-support" id="toc-async-support" class="nav-link" data-scroll-target="#async-support">Async support</a></li>
+  </ul></li>
+  <li><a href="#writable-path-permissions" id="toc-writable-path-permissions" class="nav-link" data-scroll-target="#writable-path-permissions">Writable path permissions</a>
+  <ul class="collapse">
+  <li><a href="#write-policies" id="toc-write-policies" class="nav-link" data-scroll-target="#write-policies">Write policies</a></li>
+  </ul></li>
+  <li><a href="#configuration" id="toc-configuration" class="nav-link" data-scroll-target="#configuration">Configuration</a></li>
+  </ul>
+<div class="toc-actions"><ul><li><a href="https://github.com/AnswerDotAI/safepyrun/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div><div class="quarto-alternate-formats"><h2>Other Formats</h2><ul><li><a href="index.html.md"><i class="bi bi-file-code"></i>CommonMark</a></li></ul></div></nav>
+    </div>
+<!-- main -->
+<main class="content" id="quarto-document-content">
+
+<header id="title-block-header" class="quarto-title-block default">
+<div class="quarto-title">
+<h1 class="title">safepyrun</h1>
+</div>
+
+<div>
+  <div class="description">
+    Safe(ish) running of python code
+  </div>
+</div>
+
+
+<div class="quarto-title-meta">
+
+    
+  
+    
+  </div>
+  
+
+
+</header>
+
+
+<!-- WARNING: THIS FILE WAS AUTOGENERATED! DO NOT EDIT! -->
+<p><em>safepyrun</em> is an allowlist-based Python sandbox that lets LLMs execute code safely(ish) in your real environment. Instead of isolating code in a container (which cuts it off from the libraries, data, and tools it actually needs) safepyrun runs in-process with controlled access to a curated subset of Python’s stdlib, plus any functions you explicitly opt in.</p>
+<p>It’s the Python counterpart to <a href="https://github.com/AnswerDotAI/safecmd">safecmd</a>, which does much the same thing for bash.</p>
+<section id="installation" class="level2">
+<h2 class="anchored" data-anchor-id="installation">Installation</h2>
+<p>Install from <a href="https://pypi.org/project/safepyrun/">pypi</a></p>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb1"><pre class="sourceCode sh code-with-copy"><code class="sourceCode bash"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="ex">$</span> pip install safepyrun</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</section>
+<section id="background" class="level2">
+<h2 class="anchored" data-anchor-id="background">Background</h2>
+<p>When an LLM needs to run code on your behalf, the standard advice is to sandbox it in a container. The problem is that the whole reason you want the LLM running code is so it can interact with your environment – your files, your libraries, your running processes, your data. A containerised sandbox either can’t access any of that, or it requires complex volume mounts and dependency mirroring that recreate your environment inside the container.</p>
+<p>You could just <code>exec</code> the LLM’s code directly in your process, which would give full access to everything… but “everything” includes <code>shutil.rmtree</code>, <code>os.remove</code>, <code>subprocess.run("rm -rf /")</code>, etc!</p>
+<p>safepyrun takes a middle path. It runs the LLM’s code in your real Python process, with access to your real objects, but interposes an allowlist that controls which callables are accessible. The curated default list covers a large and useful subset of the standard library (string manipulation, math, JSON parsing, path inspection, data structures, and so on) while excluding anything that writes to the filesystem, spawns processes, or modifies system state. You can extend the list for your own functions.</p>
+<p>The mechanism behind safepyrun is <a href="https://restrictedpython.readthedocs.io/">RestrictedPython</a>, a long-standing project that compiles Python source code into a modified AST (Abstract Syntax Tree) where every attribute access, item access, and iteration is routed through hook functions. This means that when the LLM’s code does <code>obj.method()</code>, it doesn’t go directly to <code>method</code> – it goes through a gatekeeper that checks whether that callable is on the allowlist. The same applies to <code>getattr</code>, <code>getitem</code>, and <code>iter</code>, so there’s no easy way to accidentally reach a dangerous function through indirect access. safepyrun supplies these hook functions, wiring them up to an allowlist of permitted callables.</p>
+<p>Because a lot of modern Python code (and many LLM tool-calling frameworks) is async, safepyrun also depends on <a href="https://github.com/AnswerDotAI/restrictedpython-async">restrictedpython-async</a>, which extends RestrictedPython to handle <code>await</code>, <code>async for</code>, and <code>async with</code> expressions.</p>
+<p>A lot of the online discussion around RestrictedPython suggests it’s not really useful for sandboxing, and that’s true if you’re trying to block a determined adversary. But an LLM is not a determined adversary. It’s a well-meaning but occasionally clumsy collaborator. The threat model is completely different: you don’t need to prevent deliberate escape attempts, you need to make it very unlikely that a hallucinated cleanup step or a misunderstood request causes damage. This is the same “safe-ish” philosophy used in <a href="https://github.com/AnswerDotAI/safecmd">safecmd</a> for bash.</p>
+<p>Once you internalise this, the design space opens up. It’s actually fine for the LLM to read files, access the internet via <code>httpx</code>, parse data, and call into your libraries. The things you want to prevent are writes to the filesystem, spawning processes, and overwriting important state. RestrictedPython gives us the mechanism to enforce this: it rewrites the AST to intercept attribute access, iteration, and item access, so that every callable goes through an allowlist check.</p>
+<p>The allowlist has three tiers. First, a curated subset of the standard library that has been audited once so every user doesn’t have to repeat the work: things like <code>re</code>, <code>json</code>, <code>itertools</code>, <code>math</code>, <code>collections</code>, <code>pathlib</code> (read-only methods), and many more. Second, user-extended functions registered via <a href="https://AnswerDotAI.github.io/safepyrun/core.html#allow"><code>allow()</code></a>, so you can opt in your own project’s functions and methods. Third, an LLM self-service mechanism: any symbol the LLM creates with a trailing underscore (like <code>helper_</code>) is automatically available in subsequent calls, letting it build up reusable utilities across a multi-step tool loop.</p>
+</section>
+<section id="usage" class="level2">
+<h2 class="anchored" data-anchor-id="usage">Usage</h2>
+<div id="0493cc22" class="cell">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> safepyrun <span class="im">import</span> <span class="op">*</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</div>
+<p>The main entry point is <code>pyrun = RunPython()</code>, which returns an async function that takes a string of Python code and executes it in the sandbox. The last expression in the code is returned as the result, and any <code>print()</code> output is captured separately. Errors are caught and reported rather than crashing the caller.</p>
+<div id="45442f79" class="cell">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a>pyrun <span class="op">=</span> RunPython()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</div>
+<div id="c26c99a3" class="cell">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="cf">await</span> pyrun(<span class="st">'1+1'</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-display">
+<pre><code>{'result': 2}</code></pre>
+</div>
+</div>
+<p>You can mix <code>print()</code> output with a return value. The printed output goes to the <code>stdout</code> key, and the last expression becomes <code>result</code>:</p>
+<div id="d1cbcae3" class="cell">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="cf">await</span> pyrun(<span class="st">'print("hello"); 1+1'</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-display">
+<pre><code>{'stdout': 'hello\n', 'result': 2}</code></pre>
+</div>
+</div>
+<p>Modules can be imported. stderr is also captured:</p>
+<div id="9fe0dded" class="cell">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb8"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a><span class="cf">await</span> pyrun(<span class="st">'''</span></span>
+<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a><span class="st">import warnings</span></span>
+<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a><span class="st">warnings.warn('a warning')</span></span>
+<span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a><span class="st">"ok"</span></span>
+<span id="cb8-5"><a href="#cb8-5" aria-hidden="true" tabindex="-1"></a><span class="st">'''</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-display">
+<pre><code>{'stderr': '&lt;tool&gt;:2: UserWarning: a warning\n', 'result': 'ok'}</code></pre>
+</div>
+</div>
+<p>A large subset of the standard library is available out of the box – things like <code>re</code>, <code>json</code>, <code>math</code>, <code>itertools</code>, <code>collections</code>, <code>pathlib</code> (read-only methods), and many more. These have been audited once so that every user doesn’t have to repeat the work:</p>
+<div id="c4e31aaf" class="cell">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb10"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a><span class="cf">await</span> pyrun(<span class="st">'import re; re.findall(r"</span><span class="ch">\\</span><span class="st">d+", "there are 3 cats and 10 dogs")'</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-display">
+<pre><code>{'result': ['3', '10']}</code></pre>
+</div>
+</div>
+<p>The default allowlist covers text and data processing (<code>re</code>, <code>json</code>, <code>csv</code>, <code>html</code>, <code>textwrap</code>, <code>string</code>, <code>difflib</code>, <code>unicodedata</code>), math and numerics (<code>math</code>, <code>cmath</code>, <code>statistics</code>, <code>decimal</code>, <code>fractions</code>, <code>random</code>, <code>operator</code>), data structures (<code>collections</code>, <code>heapq</code>, <code>bisect</code>, plus methods on all the built-in types), iteration and functional tools (<code>itertools</code>, <code>functools</code>), read-only filesystem access (<code>pathlib</code>, <code>os.path</code>, <code>fnmatch</code>), date and time (<code>datetime</code>, <code>time</code>), URL handling and read-only HTTP (<code>urllib.parse</code>, <code>httpx.get</code>, <code>ipaddress</code>), encoding and serialization (<code>base64</code>, <code>binascii</code>, <code>hashlib</code>, <code>zlib</code>, <code>pickle</code>, <code>struct</code>), introspection (<code>inspect</code>, <code>ast</code>, <code>keyword</code>, <code>sys.getsizeof</code>), XML parsing (<code>xml.etree.ElementTree</code>), and various utilities (<code>contextlib</code>, <code>copy</code>, <code>dataclasses</code>, <code>enum</code>, <code>secrets</code>, <code>uuid</code>, <code>pprint</code>, <code>shlex</code>, <code>colorsys</code>, <code>traceback</code>).</p>
+<section id="the-allow-function" class="level3">
+<h3 class="anchored" data-anchor-id="the-allow-function">The <a href="https://AnswerDotAI.github.io/safepyrun/core.html#allow"><code>allow()</code></a> function</h3>
+<p>Functions you define yourself or import from third-party packages are not automatically available. If the sandbox encounters an unregistered callable, it raises an error.</p>
+<p>To make a function available, register it with <a href="https://AnswerDotAI.github.io/safepyrun/core.html#allow"><code>allow()</code></a>:</p>
+<div id="9ba64f4a" class="cell">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb12"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> greet(name): <span class="cf">return</span> <span class="ss">f"Hello, </span><span class="sc">{</span>name<span class="sc">}</span><span class="ss">!"</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</div>
+<div id="aaadb426" class="cell">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb13"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a>allow(<span class="st">'greet'</span>)</span>
+<span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a><span class="cf">await</span> pyrun(<span class="st">'greet("World")'</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-display">
+<pre><code>{'result': 'Hello, World!'}</code></pre>
+</div>
+</div>
+<p>The same applies to anything you import from PyPI. For instance, if you wanted the LLM to be able to call <code>numpy.array</code>, you would register it with <code>allow('numpy.array')</code>.</p>
+<p><a href="https://AnswerDotAI.github.io/safepyrun/core.html#allow"><code>allow()</code></a> accepts two forms: strings and dicts. The simplest form is a bare string, which registers a single name. This works for standalone functions in the caller’s namespace:</p>
+<div id="33a74985" class="cell">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb15"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> double(x): <span class="cf">return</span> x <span class="op">*</span> <span class="dv">2</span></span>
+<span id="cb15-2"><a href="#cb15-2" aria-hidden="true" tabindex="-1"></a>allow(<span class="st">'double'</span>)</span>
+<span id="cb15-3"><a href="#cb15-3" aria-hidden="true" tabindex="-1"></a><span class="cf">await</span> pyrun(<span class="st">'double(21)'</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-display">
+<pre><code>{'result': 42}</code></pre>
+</div>
+</div>
+<p>For methods on modules or classes, use dotted string syntax. The string should match how the sandbox will look up the callable, which is <code>ClassName.method</code> or <code>module.function</code>:</p>
+<div id="5eb4eecc" class="cell">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb17"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> numpy <span class="im">as</span> np</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</div>
+<div id="fe1173b6" class="cell">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb18"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb18-1"><a href="#cb18-1" aria-hidden="true" tabindex="-1"></a>allow(<span class="st">'numpy.array'</span>, <span class="st">'numpy.ndarray.sum'</span>)</span>
+<span id="cb18-2"><a href="#cb18-2" aria-hidden="true" tabindex="-1"></a><span class="cf">await</span> pyrun(<span class="st">'np.array([1,2,3]).sum()'</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-display">
+<pre><code>{'result': 6}</code></pre>
+</div>
+</div>
+<p>Note that the string must use the actual class or module name as it appears in Python, not the alias. In the example above, even though the sandbox code uses <code>np</code>, the allowlist entry is <code>'numpy.array'</code> because <code>numpy</code> is the module’s real name.</p>
+<p>The dict form is a convenient shorthand for registering multiple methods on the same module or class at once. The key is the actual module or class object, and the value is a list of method name strings:</p>
+<div id="0046d372" class="cell">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb20"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb20-1"><a href="#cb20-1" aria-hidden="true" tabindex="-1"></a>allow({np.ndarray: [<span class="st">'mean'</span>, <span class="st">'reshape'</span>, <span class="st">'tolist'</span>]})</span>
+<span id="cb20-2"><a href="#cb20-2" aria-hidden="true" tabindex="-1"></a><span class="cf">await</span> pyrun(<span class="st">'np.array([1,2,3,4]).reshape(2,2).mean()'</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-display">
+<pre><code>{'result': 2.5}</code></pre>
+</div>
+</div>
+<p>The dict form does two things: it registers the class/module name itself (so it can be called as a constructor or accessed as a namespace), and it registers each <code>ClassName.method</code> pair. You can mix strings and dicts in a single <a href="https://AnswerDotAI.github.io/safepyrun/core.html#allow"><code>allow()</code></a> call:</p>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb22"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb22-1"><a href="#cb22-1" aria-hidden="true" tabindex="-1"></a>allow(<span class="st">'my_func'</span>, {np.linalg: [<span class="st">'norm'</span>, <span class="st">'det'</span>]})</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</section>
+<section id="the-_-suffix-convention" class="level3">
+<h3 class="anchored" data-anchor-id="the-_-suffix-convention">The <code>_</code> suffix convention</h3>
+<p>There’s a third way callables become available in the sandbox: any symbol the LLM creates whose name ends with <code>_</code> (but doesn’t start with <code>_</code>) is automatically exported back to the caller’s namespace, and is available in subsequent <code>pyrun</code> calls. This means the LLM can build up reusable helper functions across a multi-step tool loop without requiring the user to register anything:</p>
+<div id="6d3af952" class="cell">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb23"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb23-1"><a href="#cb23-1" aria-hidden="true" tabindex="-1"></a><span class="cf">await</span> pyrun(<span class="st">'def clean_(s): return s.strip().lower()'</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</div>
+<div id="c512a8ef" class="cell">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb24"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb24-1"><a href="#cb24-1" aria-hidden="true" tabindex="-1"></a><span class="cf">await</span> pyrun(<span class="st">'clean_("  Hello World  ")'</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-display">
+<pre><code>{'result': 'hello world'}</code></pre>
+</div>
+</div>
+<p>The exported symbols are real objects in your namespace, not just available inside the sandbox. This works for variables too, not just functions:</p>
+<div id="851d35fd" class="cell">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb26"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb26-1"><a href="#cb26-1" aria-hidden="true" tabindex="-1"></a><span class="cf">await</span> pyrun(<span class="st">'result_ = [x**2 for x in range(5)]'</span>)</span>
+<span id="cb26-2"><a href="#cb26-2" aria-hidden="true" tabindex="-1"></a>result_</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-display">
+<pre><code>[0, 1, 4, 9, 16]</code></pre>
+</div>
+</div>
+<p>This is particularly useful in LLM tool loops where the model might need to define a parsing function in one step and reuse it in several subsequent steps. Non-suffixed names remain local to the sandbox call and are not exported.</p>
+</section>
+<section id="async-support" class="level3">
+<h3 class="anchored" data-anchor-id="async-support">Async support</h3>
+<p>The sandbox is async-native. If the code being executed contains <code>await</code>, <code>async for</code>, or <code>async with</code> expressions, they work as expected. Many modern Python libraries and LLM tool-calling frameworks are async, and you want the sandbox to be able to call into them without workarounds.</p>
+<div id="dbd93f94" class="cell">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb28"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb28-1"><a href="#cb28-1" aria-hidden="true" tabindex="-1"></a><span class="cf">await</span> pyrun(<span class="st">'''</span></span>
+<span id="cb28-2"><a href="#cb28-2" aria-hidden="true" tabindex="-1"></a><span class="st">import asyncio</span></span>
+<span id="cb28-3"><a href="#cb28-3" aria-hidden="true" tabindex="-1"></a><span class="st">async def fetch(n): return n * 10</span></span>
+<span id="cb28-4"><a href="#cb28-4" aria-hidden="true" tabindex="-1"></a><span class="st">await asyncio.gather(fetch(1), fetch(2), fetch(3))</span></span>
+<span id="cb28-5"><a href="#cb28-5" aria-hidden="true" tabindex="-1"></a><span class="st">'''</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-display">
+<pre><code>{'result': [10, 20, 30]}</code></pre>
+</div>
+</div>
+</section>
+</section>
+<section id="writable-path-permissions" class="level2">
+<h2 class="anchored" data-anchor-id="writable-path-permissions">Writable path permissions</h2>
+<p>By default, <a href="https://AnswerDotAI.github.io/safepyrun/core.html#runpython"><code>RunPython</code></a> blocks all filesystem writes. To enable controlled writing, pass <code>ok_dests</code> — a list of directory prefixes where writes are permitted. Writing to an allowed destination works normally, but writing anywhere else raises <code>PermissionError</code>:</p>
+<div id="5823077b" class="cell">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb30"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb30-1"><a href="#cb30-1" aria-hidden="true" tabindex="-1"></a>pyrun2 <span class="op">=</span> RunPython(ok_dests<span class="op">=</span>[<span class="st">'/tmp'</span>])</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</div>
+<div id="fa95244c" class="cell">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb31"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb31-1"><a href="#cb31-1" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> pathlib <span class="im">import</span> Path</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</div>
+<div id="8159be07" class="cell">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb32"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb32-1"><a href="#cb32-1" aria-hidden="true" tabindex="-1"></a><span class="cf">await</span> pyrun2(<span class="st">"Path('/tmp/test_write.txt').write_text('hello')"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-display">
+<pre><code>{'result': 5}</code></pre>
+</div>
+</div>
+<div id="9120ada1" class="cell">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb34"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb34-1"><a href="#cb34-1" aria-hidden="true" tabindex="-1"></a><span class="cf">try</span>: <span class="cf">await</span> pyrun2(<span class="st">"Path('/etc/evil.txt').write_text('bad')"</span>)</span>
+<span id="cb34-2"><a href="#cb34-2" aria-hidden="true" tabindex="-1"></a><span class="cf">except</span> <span class="pp">PermissionError</span> <span class="im">as</span> e: <span class="bu">print</span>(<span class="ss">f'Blocked: </span><span class="sc">{</span>e<span class="sc">}</span><span class="ss">'</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Blocked: Write to '/etc/evil.txt' not allowed; permitted: ['/tmp']</code></pre>
+</div>
+</div>
+<p>The same permission checking applies to <code>open()</code> in write mode, not just <code>Path</code> methods:</p>
+<div id="431b8893" class="cell">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb36"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb36-1"><a href="#cb36-1" aria-hidden="true" tabindex="-1"></a><span class="cf">await</span> pyrun2(<span class="st">"open('/tmp/test_open.txt', 'w').write('hi')"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-display">
+<pre><code>{'result': 2}</code></pre>
+</div>
+</div>
+<div id="9ecdf0e4" class="cell">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb38"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb38-1"><a href="#cb38-1" aria-hidden="true" tabindex="-1"></a><span class="cf">try</span>: <span class="cf">await</span> pyrun2(<span class="st">"open('/root/bad.txt', 'w')"</span>)</span>
+<span id="cb38-2"><a href="#cb38-2" aria-hidden="true" tabindex="-1"></a><span class="cf">except</span> <span class="pp">PermissionError</span> <span class="im">as</span> e: <span class="bu">print</span>(<span class="ss">f'Blocked: </span><span class="sc">{</span>e<span class="sc">}</span><span class="ss">'</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Blocked: Write to '/root/bad.txt' not allowed; permitted: ['/tmp']</code></pre>
+</div>
+</div>
+<p>Read access is unaffected — only writes are gated:</p>
+<div id="9cd08ae8" class="cell">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb40"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb40-1"><a href="#cb40-1" aria-hidden="true" tabindex="-1"></a><span class="cf">await</span> pyrun2(<span class="st">"open('/etc/passwd', 'r').read(10)"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-display">
+<pre><code>{'result': '##\n# User '}</code></pre>
+</div>
+</div>
+<p>Higher-level file operations like <code>shutil.copy</code> are also intercepted. The destination is checked against <code>ok_dests</code>:</p>
+<div id="a57df611" class="cell">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb42"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb42-1"><a href="#cb42-1" aria-hidden="true" tabindex="-1"></a><span class="cf">await</span> pyrun2(<span class="st">"import shutil; shutil.copy('/tmp/test_write.txt', '/tmp/test_copy.txt')"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-display">
+<pre><code>{'result': '/tmp/test_copy.txt'}</code></pre>
+</div>
+</div>
+<div id="df831a8b" class="cell">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb44"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb44-1"><a href="#cb44-1" aria-hidden="true" tabindex="-1"></a><span class="cf">try</span>: <span class="cf">await</span> pyrun2(<span class="st">"import shutil; shutil.copy('/tmp/test_write.txt', '/root/bad.txt')"</span>)</span>
+<span id="cb44-2"><a href="#cb44-2" aria-hidden="true" tabindex="-1"></a><span class="cf">except</span> <span class="pp">PermissionError</span> <span class="im">as</span> e: <span class="bu">print</span>(<span class="ss">f'Blocked: </span><span class="sc">{</span>e<span class="sc">}</span><span class="ss">'</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Blocked: Write to '/root/bad.txt' not allowed; permitted: ['/tmp']</code></pre>
+</div>
+</div>
+<p>Without <code>ok_dests</code>, the default <a href="https://AnswerDotAI.github.io/safepyrun/core.html#runpython"><code>RunPython</code></a> instance blocks all write operations entirely — <code>Path.write_text</code> isn’t even callable:</p>
+<div id="9c74ebb3" class="cell">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb46"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb46-1"><a href="#cb46-1" aria-hidden="true" tabindex="-1"></a><span class="cf">try</span>: <span class="cf">await</span> pyrun(<span class="st">"Path('/tmp/test.txt').write_text('nope')"</span>)</span>
+<span id="cb46-2"><a href="#cb46-2" aria-hidden="true" tabindex="-1"></a><span class="cf">except</span> <span class="pp">AttributeError</span> <span class="im">as</span> e: <span class="bu">print</span>(<span class="ss">f'No ok_dests: </span><span class="sc">{</span>e<span class="sc">}</span><span class="ss">'</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>No ok_dests: Cannot access callable: write_text</code></pre>
+</div>
+</div>
+<p>You can use <code>'.'</code> to allow writes relative to the current working directory. Path traversal attempts (<code>../</code>, <code>subdir/../../</code>) are detected and blocked, so the sandbox can’t escape the permitted directory:</p>
+<div id="8fbcd0f6" class="cell">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb48"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb48-1"><a href="#cb48-1" aria-hidden="true" tabindex="-1"></a>pyrun_cwd <span class="op">=</span> RunPython(ok_dests<span class="op">=</span>[<span class="st">'.'</span>])</span>
+<span id="cb48-2"><a href="#cb48-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb48-3"><a href="#cb48-3" aria-hidden="true" tabindex="-1"></a><span class="co"># Writing to cwd should work</span></span>
+<span id="cb48-4"><a href="#cb48-4" aria-hidden="true" tabindex="-1"></a><span class="cf">await</span> pyrun_cwd(<span class="st">"Path('test_cwd_ok.txt').write_text('hello')"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-display">
+<pre><code>{'result': 5}</code></pre>
+</div>
+</div>
+<div id="cba33806" class="cell">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb50"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb50-1"><a href="#cb50-1" aria-hidden="true" tabindex="-1"></a>Path(<span class="st">'test_cwd_ok.txt'</span>).unlink(missing_ok<span class="op">=</span><span class="va">True</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</div>
+<p>Writing to /tmp is blocked here since it’s not in ok_dests:</p>
+<div id="521d7828" class="cell">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb51"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb51-1"><a href="#cb51-1" aria-hidden="true" tabindex="-1"></a><span class="cf">try</span>: <span class="cf">await</span> pyrun_cwd(<span class="st">"Path('/tmp/nope.txt').write_text('bad')"</span>)</span>
+<span id="cb51-2"><a href="#cb51-2" aria-hidden="true" tabindex="-1"></a><span class="cf">except</span> <span class="pp">PermissionError</span>: <span class="bu">print</span>(<span class="st">"Blocked /tmp as expected"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Blocked /tmp as expected</code></pre>
+</div>
+</div>
+<p>Parent traversal is blocked if it resolves to a location outside ok_dests:</p>
+<div id="61b2e078" class="cell">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb53"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb53-1"><a href="#cb53-1" aria-hidden="true" tabindex="-1"></a><span class="cf">try</span>: <span class="cf">await</span> pyrun_cwd(<span class="st">"Path('../escape.txt').write_text('bad')"</span>)</span>
+<span id="cb53-2"><a href="#cb53-2" aria-hidden="true" tabindex="-1"></a><span class="cf">except</span> <span class="pp">PermissionError</span>: <span class="bu">print</span>(<span class="st">"Blocked ../ as expected"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Blocked ../ as expected</code></pre>
+</div>
+</div>
+<section id="write-policies" class="level3">
+<h3 class="anchored" data-anchor-id="write-policies">Write policies</h3>
+<p>When <code>ok_dests</code> is set, safepyrun uses write policies to determine how to validate each callable’s destination arguments. Three built-in policy classes cover common patterns: checking a positional or keyword argument (<a href="https://AnswerDotAI.github.io/safepyrun/core.html#poswritepolicy"><code>PosWritePolicy</code></a>), checking the <code>Path</code> object itself (<a href="https://AnswerDotAI.github.io/safepyrun/core.html#pathwritepolicy"><code>PathWritePolicy</code></a>), and checking <code>open()</code> calls only when the mode is writable (<a href="https://AnswerDotAI.github.io/safepyrun/core.html#openwritepolicy"><code>OpenWritePolicy</code></a>). You can also subclass <a href="https://AnswerDotAI.github.io/safepyrun/core.html#writepolicy"><code>WritePolicy</code></a> to create custom checks.</p>
+<p>The simplest, <a href="https://AnswerDotAI.github.io/safepyrun/core.html#poswritepolicy"><code>PosWritePolicy</code></a>, checks a specific positional or keyword argument against the allowed destinations. Here, position 1 (or keyword <code>dst</code>) is validated — writing to <code>/tmp</code> is allowed, but <code>/root</code> is blocked:</p>
+<div id="7b86dfd3" class="cell">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb55"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb55-1"><a href="#cb55-1" aria-hidden="true" tabindex="-1"></a>pp <span class="op">=</span> PosWritePolicy(<span class="dv">1</span>, <span class="st">'dst'</span>)</span>
+<span id="cb55-2"><a href="#cb55-2" aria-hidden="true" tabindex="-1"></a>pp.check(<span class="va">None</span>, [<span class="st">'src'</span>, <span class="st">'/tmp/ok'</span>], {}, [<span class="st">'/tmp'</span>])</span>
+<span id="cb55-3"><a href="#cb55-3" aria-hidden="true" tabindex="-1"></a><span class="cf">try</span>: pp.check(<span class="va">None</span>, [<span class="st">'src'</span>, <span class="st">'/root/bad'</span>], {}, [<span class="st">'/tmp'</span>])</span>
+<span id="cb55-4"><a href="#cb55-4" aria-hidden="true" tabindex="-1"></a><span class="cf">except</span> <span class="pp">PermissionError</span>: <span class="bu">print</span>(<span class="st">"PosWritePolicy correctly blocked /root/bad"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>PosWritePolicy correctly blocked /root/bad</code></pre>
+</div>
+</div>
+<p>You can create custom write policies by subclassing <a href="https://AnswerDotAI.github.io/safepyrun/core.html#writepolicy"><code>WritePolicy</code></a> and implementing the <code>check</code> method. For example, here we show a policy that only allows writes to files with specific extensions — useful if you want the LLM to create <code>.csv</code> or <code>.json</code> files but not arbitrary scripts.</p>
+<p>The <code>check</code> signature receives <code>(obj, args, kwargs, ok_dests)</code> where <code>obj</code> is the object the method is called on (e.g.&nbsp;a <code>Path</code> instance), <code>args</code>/<code>kwargs</code> are the method’s arguments, and <code>ok_dests</code> is the list of permitted directory prefixes. Calling <a href="https://AnswerDotAI.github.io/safepyrun/core.html#chk_dest"><code>chk_dest</code></a> first handles the directory check, then the custom logic adds the extension constraint on top.</p>
+<div id="34371aa8" class="cell">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb57"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb57-1"><a href="#cb57-1" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> ExtWritePolicy(WritePolicy):</span>
+<span id="cb57-2"><a href="#cb57-2" aria-hidden="true" tabindex="-1"></a>    <span class="co">"Only allow writes to paths with specified extensions"</span></span>
+<span id="cb57-3"><a href="#cb57-3" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> <span class="fu">__init__</span>(<span class="va">self</span>, exts): <span class="va">self</span>.exts <span class="op">=</span> <span class="bu">set</span>(exts)</span>
+<span id="cb57-4"><a href="#cb57-4" aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> check(<span class="va">self</span>, obj, args, kwargs, ok_dests):</span>
+<span id="cb57-5"><a href="#cb57-5" aria-hidden="true" tabindex="-1"></a>        chk_dest(obj, ok_dests)</span>
+<span id="cb57-6"><a href="#cb57-6" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> Path(<span class="bu">str</span>(obj)).suffix <span class="kw">not</span> <span class="kw">in</span> <span class="va">self</span>.exts: <span class="cf">raise</span> <span class="pp">PermissionError</span>(<span class="ss">f"</span><span class="sc">{</span>Path(<span class="bu">str</span>(obj))<span class="sc">.</span>suffix<span class="sc">!r}</span><span class="ss"> not allowed"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</div>
+<div id="8215b066" class="cell">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb58"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb58-1"><a href="#cb58-1" aria-hidden="true" tabindex="-1"></a>ep <span class="op">=</span> ExtWritePolicy([<span class="st">'.csv'</span>, <span class="st">'.json'</span>])</span>
+<span id="cb58-2"><a href="#cb58-2" aria-hidden="true" tabindex="-1"></a>ep.check(Path(<span class="st">'/tmp/data.csv'</span>), [], {}, [<span class="st">'/tmp'</span>])</span>
+<span id="cb58-3"><a href="#cb58-3" aria-hidden="true" tabindex="-1"></a><span class="cf">try</span>: ep.check(Path(<span class="st">'/tmp/script.sh'</span>), [], {}, [<span class="st">'/tmp'</span>])</span>
+<span id="cb58-4"><a href="#cb58-4" aria-hidden="true" tabindex="-1"></a><span class="cf">except</span> <span class="pp">PermissionError</span>: <span class="bu">print</span>(<span class="st">"ExtWritePolicy correctly blocked .sh"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>ExtWritePolicy correctly blocked .sh</code></pre>
+</div>
+</div>
+<p>You can register it with <a href="https://AnswerDotAI.github.io/safepyrun/core.html#allow_write"><code>allow_write</code></a> just like the built-in policies. The key is the <code>ClassName.method</code> string the sandbox will intercept:</p>
+<div id="ff90c6e0" class="cell">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb60"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb60-1"><a href="#cb60-1" aria-hidden="true" tabindex="-1"></a>allow_write({<span class="st">'Path.write_text'</span>: ExtWritePolicy([<span class="st">'.csv'</span>, <span class="st">'.json'</span>, <span class="st">'.txt'</span>])})</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</div>
+</section>
+</section>
+<section id="configuration" class="level2">
+<h2 class="anchored" data-anchor-id="configuration">Configuration</h2>
+<p><code>safepyrun</code> loads an optional user config from <code>{xdg_config_home}/safepyrun/config.py</code> at import time, after all defaults are registered. This lets you permanently extend the sandbox allowlists without modifying the package. The config file is executed with all <code>safepyrun.core</code> globals already available, so no imports are needed. This includes <a href="https://AnswerDotAI.github.io/safepyrun/core.html#allow"><code>allow</code></a>, <a href="https://AnswerDotAI.github.io/safepyrun/core.html#allow_write"><code>allow_write</code></a>, <a href="https://AnswerDotAI.github.io/safepyrun/core.html#writepolicy"><code>WritePolicy</code></a>, <a href="https://AnswerDotAI.github.io/safepyrun/core.html#pathwritepolicy"><code>PathWritePolicy</code></a>, <a href="https://AnswerDotAI.github.io/safepyrun/core.html#poswritepolicy"><code>PosWritePolicy</code></a>, <a href="https://AnswerDotAI.github.io/safepyrun/core.html#openwritepolicy"><code>OpenWritePolicy</code></a>, and all standard library modules already imported by the module.</p>
+<p>Example <code>~/.config/safepyrun/config.py</code> (Linux) or <code>~/Library/Application Support/safepyrun/config.py</code> (macOS):</p>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb61"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb61-1"><a href="#cb61-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> pandas</span>
+<span id="cb61-2"><a href="#cb61-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb61-3"><a href="#cb61-3" aria-hidden="true" tabindex="-1"></a><span class="co"># Add pandas tools</span></span>
+<span id="cb61-4"><a href="#cb61-4" aria-hidden="true" tabindex="-1"></a>allow({pandas.DataFrame: [<span class="st">'head'</span>, <span class="st">'describe'</span>, <span class="st">'info'</span>, <span class="st">'shape'</span>]})</span>
+<span id="cb61-5"><a href="#cb61-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb61-6"><a href="#cb61-6" aria-hidden="true" tabindex="-1"></a><span class="co"># Allow pandas to write CSV to ~/data</span></span>
+<span id="cb61-7"><a href="#cb61-7" aria-hidden="true" tabindex="-1"></a>allow_write({<span class="st">'DataFrame.to_csv'</span>: PosWritePolicy(<span class="dv">0</span>, <span class="st">'path_or_buf'</span>)})</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p>If the config file has errors, a warning is emitted and the defaults remain intact.</p>
+
+
+</section>
+
+</main> <!-- /main -->
+<script id="quarto-html-after-body" type="application/javascript">
+  window.document.addEventListener("DOMContentLoaded", function (event) {
+    const icon = "";
+    const anchorJS = new window.AnchorJS();
+    anchorJS.options = {
+      placement: 'right',
+      icon: icon
+    };
+    anchorJS.add('.anchored');
+    const isCodeAnnotation = (el) => {
+      for (const clz of el.classList) {
+        if (clz.startsWith('code-annotation-')) {                     
+          return true;
+        }
+      }
+      return false;
+    }
+    const onCopySuccess = function(e) {
+      // button target
+      const button = e.trigger;
+      // don't keep focus
+      button.blur();
+      // flash "checked"
+      button.classList.add('code-copy-button-checked');
+      var currentTitle = button.getAttribute("title");
+      button.setAttribute("title", "Copied!");
+      let tooltip;
+      if (window.bootstrap) {
+        button.setAttribute("data-bs-toggle", "tooltip");
+        button.setAttribute("data-bs-placement", "left");
+        button.setAttribute("data-bs-title", "Copied!");
+        tooltip = new bootstrap.Tooltip(button, 
+          { trigger: "manual", 
+            customClass: "code-copy-button-tooltip",
+            offset: [0, -8]});
+        tooltip.show();    
+      }
+      setTimeout(function() {
+        if (tooltip) {
+          tooltip.hide();
+          button.removeAttribute("data-bs-title");
+          button.removeAttribute("data-bs-toggle");
+          button.removeAttribute("data-bs-placement");
+        }
+        button.setAttribute("title", currentTitle);
+        button.classList.remove('code-copy-button-checked');
+      }, 1000);
+      // clear code selection
+      e.clearSelection();
+    }
+    const getTextToCopy = function(trigger) {
+      const outerScaffold = trigger.parentElement.cloneNode(true);
+      const codeEl = outerScaffold.querySelector('code');
+      for (const childEl of codeEl.children) {
+        if (isCodeAnnotation(childEl)) {
+          childEl.remove();
+        }
+      }
+      return codeEl.innerText;
+    }
+    const clipboard = new window.ClipboardJS('.code-copy-button:not([data-in-quarto-modal])', {
+      text: getTextToCopy
+    });
+    clipboard.on('success', onCopySuccess);
+    if (window.document.getElementById('quarto-embedded-source-code-modal')) {
+      const clipboardModal = new window.ClipboardJS('.code-copy-button[data-in-quarto-modal]', {
+        text: getTextToCopy,
+        container: window.document.getElementById('quarto-embedded-source-code-modal')
+      });
+      clipboardModal.on('success', onCopySuccess);
+    }
+      var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
+      var mailtoRegex = new RegExp(/^mailto:/);
+        var filterRegex = new RegExp("https:\/\/AnswerDotAI\.github\.io\/safepyrun");
+      var isInternal = (href) => {
+          return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
+      }
+      // Inspect non-navigation links and adorn them if external
+     var links = window.document.querySelectorAll('a[href]:not(.nav-link):not(.navbar-brand):not(.toc-action):not(.sidebar-link):not(.sidebar-item-toggle):not(.pagination-link):not(.no-external):not([aria-hidden]):not(.dropdown-item):not(.quarto-navigation-tool):not(.about-link)');
+      for (var i=0; i<links.length; i++) {
+        const link = links[i];
+        if (!isInternal(link.href)) {
+          // undo the damage that might have been done by quarto-nav.js in the case of
+          // links that we want to consider external
+          if (link.dataset.originalHref !== undefined) {
+            link.href = link.dataset.originalHref;
+          }
+        }
+      }
+    function tippyHover(el, contentFn, onTriggerFn, onUntriggerFn) {
+      const config = {
+        allowHTML: true,
+        maxWidth: 500,
+        delay: 100,
+        arrow: false,
+        appendTo: function(el) {
+            return el.parentElement;
+        },
+        interactive: true,
+        interactiveBorder: 10,
+        theme: 'quarto',
+        placement: 'bottom-start',
+      };
+      if (contentFn) {
+        config.content = contentFn;
+      }
+      if (onTriggerFn) {
+        config.onTrigger = onTriggerFn;
+      }
+      if (onUntriggerFn) {
+        config.onUntrigger = onUntriggerFn;
+      }
+      window.tippy(el, config); 
+    }
+    const noterefs = window.document.querySelectorAll('a[role="doc-noteref"]');
+    for (var i=0; i<noterefs.length; i++) {
+      const ref = noterefs[i];
+      tippyHover(ref, function() {
+        // use id or data attribute instead here
+        let href = ref.getAttribute('data-footnote-href') || ref.getAttribute('href');
+        try { href = new URL(href).hash; } catch {}
+        const id = href.replace(/^#\/?/, "");
+        const note = window.document.getElementById(id);
+        if (note) {
+          return note.innerHTML;
+        } else {
+          return "";
+        }
+      });
+    }
+    const xrefs = window.document.querySelectorAll('a.quarto-xref');
+    const processXRef = (id, note) => {
+      // Strip column container classes
+      const stripColumnClz = (el) => {
+        el.classList.remove("page-full", "page-columns");
+        if (el.children) {
+          for (const child of el.children) {
+            stripColumnClz(child);
+          }
+        }
+      }
+      stripColumnClz(note)
+      if (id === null || id.startsWith('sec-')) {
+        // Special case sections, only their first couple elements
+        const container = document.createElement("div");
+        if (note.children && note.children.length > 2) {
+          container.appendChild(note.children[0].cloneNode(true));
+          for (let i = 1; i < note.children.length; i++) {
+            const child = note.children[i];
+            if (child.tagName === "P" && child.innerText === "") {
+              continue;
+            } else {
+              container.appendChild(child.cloneNode(true));
+              break;
+            }
+          }
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(container);
+          }
+          return container.innerHTML
+        } else {
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(note);
+          }
+          return note.innerHTML;
+        }
+      } else {
+        // Remove any anchor links if they are present
+        const anchorLink = note.querySelector('a.anchorjs-link');
+        if (anchorLink) {
+          anchorLink.remove();
+        }
+        if (window.Quarto?.typesetMath) {
+          window.Quarto.typesetMath(note);
+        }
+        if (note.classList.contains("callout")) {
+          return note.outerHTML;
+        } else {
+          return note.innerHTML;
+        }
+      }
+    }
+    for (var i=0; i<xrefs.length; i++) {
+      const xref = xrefs[i];
+      tippyHover(xref, undefined, function(instance) {
+        instance.disable();
+        let url = xref.getAttribute('href');
+        let hash = undefined; 
+        if (url.startsWith('#')) {
+          hash = url;
+        } else {
+          try { hash = new URL(url).hash; } catch {}
+        }
+        if (hash) {
+          const id = hash.replace(/^#\/?/, "");
+          const note = window.document.getElementById(id);
+          if (note !== null) {
+            try {
+              const html = processXRef(id, note.cloneNode(true));
+              instance.setContent(html);
+            } finally {
+              instance.enable();
+              instance.show();
+            }
+          } else {
+            // See if we can fetch this
+            fetch(url.split('#')[0])
+            .then(res => res.text())
+            .then(html => {
+              const parser = new DOMParser();
+              const htmlDoc = parser.parseFromString(html, "text/html");
+              const note = htmlDoc.getElementById(id);
+              if (note !== null) {
+                const html = processXRef(id, note);
+                instance.setContent(html);
+              } 
+            }).finally(() => {
+              instance.enable();
+              instance.show();
+            });
+          }
+        } else {
+          // See if we can fetch a full url (with no hash to target)
+          // This is a special case and we should probably do some content thinning / targeting
+          fetch(url)
+          .then(res => res.text())
+          .then(html => {
+            const parser = new DOMParser();
+            const htmlDoc = parser.parseFromString(html, "text/html");
+            const note = htmlDoc.querySelector('main.content');
+            if (note !== null) {
+              // This should only happen for chapter cross references
+              // (since there is no id in the URL)
+              // remove the first header
+              if (note.children.length > 0 && note.children[0].tagName === "HEADER") {
+                note.children[0].remove();
+              }
+              const html = processXRef(null, note);
+              instance.setContent(html);
+            } 
+          }).finally(() => {
+            instance.enable();
+            instance.show();
+          });
+        }
+      }, function(instance) {
+      });
+    }
+        let selectedAnnoteEl;
+        const selectorForAnnotation = ( cell, annotation) => {
+          let cellAttr = 'data-code-cell="' + cell + '"';
+          let lineAttr = 'data-code-annotation="' +  annotation + '"';
+          const selector = 'span[' + cellAttr + '][' + lineAttr + ']';
+          return selector;
+        }
+        const selectCodeLines = (annoteEl) => {
+          const doc = window.document;
+          const targetCell = annoteEl.getAttribute("data-target-cell");
+          const targetAnnotation = annoteEl.getAttribute("data-target-annotation");
+          const annoteSpan = window.document.querySelector(selectorForAnnotation(targetCell, targetAnnotation));
+          const lines = annoteSpan.getAttribute("data-code-lines").split(",");
+          const lineIds = lines.map((line) => {
+            return targetCell + "-" + line;
+          })
+          let top = null;
+          let height = null;
+          let parent = null;
+          if (lineIds.length > 0) {
+              //compute the position of the single el (top and bottom and make a div)
+              const el = window.document.getElementById(lineIds[0]);
+              top = el.offsetTop;
+              height = el.offsetHeight;
+              parent = el.parentElement.parentElement;
+            if (lineIds.length > 1) {
+              const lastEl = window.document.getElementById(lineIds[lineIds.length - 1]);
+              const bottom = lastEl.offsetTop + lastEl.offsetHeight;
+              height = bottom - top;
+            }
+            if (top !== null && height !== null && parent !== null) {
+              // cook up a div (if necessary) and position it 
+              let div = window.document.getElementById("code-annotation-line-highlight");
+              if (div === null) {
+                div = window.document.createElement("div");
+                div.setAttribute("id", "code-annotation-line-highlight");
+                div.style.position = 'absolute';
+                parent.appendChild(div);
+              }
+              div.style.top = top - 2 + "px";
+              div.style.height = height + 4 + "px";
+              div.style.left = 0;
+              let gutterDiv = window.document.getElementById("code-annotation-line-highlight-gutter");
+              if (gutterDiv === null) {
+                gutterDiv = window.document.createElement("div");
+                gutterDiv.setAttribute("id", "code-annotation-line-highlight-gutter");
+                gutterDiv.style.position = 'absolute';
+                const codeCell = window.document.getElementById(targetCell);
+                const gutter = codeCell.querySelector('.code-annotation-gutter');
+                gutter.appendChild(gutterDiv);
+              }
+              gutterDiv.style.top = top - 2 + "px";
+              gutterDiv.style.height = height + 4 + "px";
+            }
+            selectedAnnoteEl = annoteEl;
+          }
+        };
+        const unselectCodeLines = () => {
+          const elementsIds = ["code-annotation-line-highlight", "code-annotation-line-highlight-gutter"];
+          elementsIds.forEach((elId) => {
+            const div = window.document.getElementById(elId);
+            if (div) {
+              div.remove();
+            }
+          });
+          selectedAnnoteEl = undefined;
+        };
+          // Handle positioning of the toggle
+      window.addEventListener(
+        "resize",
+        throttle(() => {
+          elRect = undefined;
+          if (selectedAnnoteEl) {
+            selectCodeLines(selectedAnnoteEl);
+          }
+        }, 10)
+      );
+      function throttle(fn, ms) {
+      let throttle = false;
+      let timer;
+        return (...args) => {
+          if(!throttle) { // first call gets through
+              fn.apply(this, args);
+              throttle = true;
+          } else { // all the others get throttled
+              if(timer) clearTimeout(timer); // cancel #2
+              timer = setTimeout(() => {
+                fn.apply(this, args);
+                timer = throttle = false;
+              }, ms);
+          }
+        };
+      }
+        // Attach click handler to the DT
+        const annoteDls = window.document.querySelectorAll('dt[data-target-cell]');
+        for (const annoteDlNode of annoteDls) {
+          annoteDlNode.addEventListener('click', (event) => {
+            const clickedEl = event.target;
+            if (clickedEl !== selectedAnnoteEl) {
+              unselectCodeLines();
+              const activeEl = window.document.querySelector('dt[data-target-cell].code-annotation-active');
+              if (activeEl) {
+                activeEl.classList.remove('code-annotation-active');
+              }
+              selectCodeLines(clickedEl);
+              clickedEl.classList.add('code-annotation-active');
+            } else {
+              // Unselect the line
+              unselectCodeLines();
+              clickedEl.classList.remove('code-annotation-active');
+            }
+          });
+        }
+    const findCites = (el) => {
+      const parentEl = el.parentElement;
+      if (parentEl) {
+        const cites = parentEl.dataset.cites;
+        if (cites) {
+          return {
+            el,
+            cites: cites.split(' ')
+          };
+        } else {
+          return findCites(el.parentElement)
+        }
+      } else {
+        return undefined;
+      }
+    };
+    var bibliorefs = window.document.querySelectorAll('a[role="doc-biblioref"]');
+    for (var i=0; i<bibliorefs.length; i++) {
+      const ref = bibliorefs[i];
+      const citeInfo = findCites(ref);
+      if (citeInfo) {
+        tippyHover(citeInfo.el, function() {
+          var popup = window.document.createElement('div');
+          citeInfo.cites.forEach(function(cite) {
+            var citeDiv = window.document.createElement('div');
+            citeDiv.classList.add('hanging-indent');
+            citeDiv.classList.add('csl-entry');
+            var biblioDiv = window.document.getElementById('ref-' + cite);
+            if (biblioDiv) {
+              citeDiv.innerHTML = biblioDiv.innerHTML;
+            }
+            popup.appendChild(citeDiv);
+          });
+          return popup.innerHTML;
+        });
+      }
+    }
+  });
+  </script>
+</div> <!-- /content -->
+
+
+
+
+<footer class="footer"><div class="nav-footer"><div class="nav-footer-center"><div class="toc-actions d-sm-block d-md-none"><ul><li><a href="https://github.com/AnswerDotAI/safepyrun/issues/new" class="toc-action"><i class="bi bi-github"></i>Report an issue</a></li></ul></div></div></div></footer></body></html>
