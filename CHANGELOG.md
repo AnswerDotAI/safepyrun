@@ -2,6 +2,13 @@
 
 <!-- do not remove -->
 
+## 0.0.13
+
+### New Features
+
+- Allow sleep ([#13](https://github.com/AnswerDotAI/safepyrun/issues/13))
+
+
 ## 0.0.12
 
 ### New Features
