@@ -410,5 +410,5 @@ def allow_matplotlib():
 # %% ../nbs/00_core.ipynb #8d1cb417
 def load_ipython_extension(ip):
     ns = ip.user_ns
-    ns['pyrun'] = pyrun = RunPython()
+    ns['pyrun'] = pyrun = RunPython(g=ns)
     create_pyrun_magic(ip, pyrun)
