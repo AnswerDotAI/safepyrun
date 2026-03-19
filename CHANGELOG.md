@@ -2,6 +2,13 @@
 
 <!-- do not remove -->
 
+## 0.0.14
+
+### New Features
+
+- Add `default_ok_dests` config, expanduser path support, and expose allow in IPython extension ([#15](https://github.com/AnswerDotAI/safepyrun/issues/15))
+
+
 ## 0.0.13
 
 ### New Features
