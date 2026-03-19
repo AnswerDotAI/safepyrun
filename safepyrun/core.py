@@ -2,8 +2,9 @@
 
 # %% auto #0
 __all__ = ['all_builtins', 'ALLOWED_DUNDERS', 'default_ok_dests', 'find_var', 'allow', 'chk_dest', 'WritePolicy',
-           'PosWritePolicy', 'PathWritePolicy', 'OpenWritePolicy', 'allow_write', 'SafeTransformer', 'RunPython',
-           'create_pyrun_magic', 'safe_type', 'allow_matplotlib', 'load_ipython_extension']
+           'PosWritePolicy', 'PathWritePolicy', 'OpenWritePolicy', 'allow_write', 'allow_write_types',
+           'SafeTransformer', 'RunPython', 'create_pyrun_magic', 'safe_type', 'allow_matplotlib',
+           'load_ipython_extension']
 
 # %% ../nbs/00_core.ipynb #468aa264
 from fastcore.utils import *
@@ -108,6 +109,18 @@ def allow_write(policies):
     "Register write policies for method/function names"
     __pytools_write__.update(policies)
 
+# %% ../nbs/00_core.ipynb #b0f8587e
+__pytools_write_types__ = set()
+
+def allow_write_types(*types):
+    "Allow in-place mutation of instances of these types (and their subclasses via isinstance)"
+    __pytools_write_types__.update(types)
+
+def _default_write_(obj):
+    "Guard for in-place mutation; allows only registered types"
+    if isinstance(obj, tuple(__pytools_write_types__)): return obj
+    raise TypeError(f"Write to {type(obj).__name__} not allowed in sandbox")
+
 # %% ../nbs/00_core.ipynb #703cdc90
 class _WriteChecked:
     "Wrap a method to enforce its WritePolicy before calling"
@@ -211,6 +224,7 @@ async def _run_python(code:str, g=None, ok_dests=None):
         builtins['open'] = safe_open
     rg = dict(__builtins__=builtins, _getattr_=_make_safe_getattr(ok_dests),
               _getitem_=lambda o,k: o[k], _getiter_=iter, _apply_ = lambda f, *a, **kw: f(*a, **kw),
+              _write_=_default_write_,
               _print_=_DirectPrint, _print=_DirectPrint(),
               _unpack_sequence_=unpack, _iter_unpack_sequence_=unpack,
               enumerate=enumerate, sorted=sorted, reversed=reversed, max=max, min=min, **tools)
@@ -243,7 +257,8 @@ default_ok_dests = None
 class RunPython:
     def __init__(self, g=None, sentinel=None, ok_dests=UNSET):
         if ok_dests is UNSET: ok_dests = default_ok_dests
-        self.g,self.ok_dests = g,ok_dests
+        self.g = _find_frame_dict(sentinel) if g is None else g
+        self.ok_dests = ok_dests
 
     @property
     def __doc__(self):
