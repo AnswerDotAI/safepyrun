@@ -2,6 +2,17 @@
 
 <!-- do not remove -->
 
+## 0.0.15
+
+### New Features
+
+- Add `allow_write_types` API for controlling in-place object mutation
+
+### Bugs Squashed
+
+- fix pyrun namespace to use kernel's `user_ns` ([#14](https://github.com/AnswerDotAI/safepyrun/pull/14)), thanks to [@KeremTurgutlu](https://github.com/KeremTurgutlu)
+
+
 ## 0.0.14
 
 ### New Features
