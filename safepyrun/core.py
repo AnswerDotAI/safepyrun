@@ -21,11 +21,13 @@ import xml.etree.ElementTree as ET,ipaddress,colorsys,cmath,traceback,sys,shutil
 from datetime import datetime
 from urllib.parse import quote,unquote,urlencode
 from io import StringIO,BytesIO
-from collections import Counter,deque
+from collections import Counter,deque,OrderedDict
 from IPython.display import display,HTML,Markdown,Image,Pretty,SVG
+from types import SimpleNamespace
 
 # %% ../nbs/00_core.ipynb #f178e529
 from fastcore.imports import __llmtools__
+from fastcore.test import expect_fail,test_eq
 from RestrictedPython import utility_builtins, safe_builtins,limited_builtins
 from RestrictedPython.transformer import RestrictingNodeTransformer, INSPECT_ATTRIBUTES, copy_locations
 from restrictedpython_async import *
@@ -119,7 +121,7 @@ def allow_write_types(*types):
 def _default_write_(obj):
     "Guard for in-place mutation; allows only registered types"
     if isinstance(obj, tuple(__pytools_write_types__)): return obj
-    raise TypeError(f"Write to {type(obj).__name__} not allowed in sandbox")
+    raise PermissionError(f"Write to {type(obj).__name__} not allowed in sandbox")
 
 # %% ../nbs/00_core.ipynb #703cdc90
 class _WriteChecked:
@@ -224,7 +226,7 @@ async def _run_python(code:str, g=None, ok_dests=None):
         builtins['open'] = safe_open
     rg = dict(__builtins__=builtins, _getattr_=_make_safe_getattr(ok_dests),
               _getitem_=lambda o,k: o[k], _getiter_=iter, _apply_ = lambda f, *a, **kw: f(*a, **kw),
-              _write_=_default_write_,
+              _write_=_default_write_, __metaclass__=type, __name__='<tool>',
               _print_=_DirectPrint, _print=_DirectPrint(),
               _unpack_sequence_=unpack, _iter_unpack_sequence_=unpack,
               enumerate=enumerate, sorted=sorted, reversed=reversed, max=max, min=min, **tools)
