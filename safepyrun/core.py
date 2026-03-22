@@ -2,14 +2,15 @@
 
 # %% auto #0
 __all__ = ['all_builtins', 'ALLOWED_DUNDERS', 'default_ok_dests', 'find_var', 'allow', 'chk_dest', 'WritePolicy',
-           'PosWritePolicy', 'PathWritePolicy', 'OpenWritePolicy', 'allow_write', 'allow_write_types',
-           'SafeTransformer', 'RunPython', 'create_pyrun_magic', 'safe_type', 'allow_matplotlib',
+           'PosWritePolicy', 'PathWritePolicy', 'OpenWritePolicy', 'allow_write', 'allow_write_types', 'sdir',
+           'SafeTransformer', 'RunPython', 'create_pyrun_magic', 'safe_type', 'doc', 'allow_matplotlib',
            'load_ipython_extension']
 
 # %% ../nbs/00_core.ipynb #468aa264
 from fastcore.utils import *
 from fastcore.xtras import asdict
 from fastcore.xdg import xdg_config_home
+from fastcore.docments import MarkdownRenderer
 from inspect import currentframe,Parameter,signature
 from contextvars import ContextVar
 
@@ -140,11 +141,14 @@ def _safe_open(ok_dests):
         return open(*args, **kwargs)
     return _open
 
-# %% ../nbs/00_core.ipynb #12f3bde3
+# %% ../nbs/00_core.ipynb #fee6c11b
+def sdir(o): return [a for a in dir(o) if not a.startswith('_')]
+
 all_builtins = safe_builtins | utility_builtins | limited_builtins | async_builtins | dict(
     dict=dict, list=list, set=set, tuple=tuple, frozenset=frozenset,
     iter=iter, next=next,
-    __import__=__import__
+    __import__=__import__,
+    help=help, dir=sdir
 )
 
 # %% ../nbs/00_core.ipynb #069afe1c
@@ -249,7 +253,7 @@ async def _run_python(code:str, g=None, ok_dests=None):
         if tree.body: await run(ast.unparse(ast.Module(tree.body, [])))
         res = await run(ast.unparse(ast.Expression(last.value)), False)
     else: await run(code)
-    g.update({k:v for k,v in loc.items() if k.endswith('_') and not k.startswith('_')})
+    g.update({k:v for k,v in loc.items() if not k.startswith('_') and (k not in g or k.endswith('_'))})
     return res
 
 # %% ../nbs/00_core.ipynb #5d38a1d0
@@ -265,13 +269,17 @@ class RunPython:
     @property
     def __doc__(self):
         tools = ', '.join(sorted(__llmtools__|__pytools__))
+        def _cls_name(o): return getattr(o, '__name__', None) or getattr(o, '__qualname__', str(o))
+        meths = '; '.join(f"`{_cls_name(c)}`: {', '.join(sorted(m for m in ms if m is not ...))}" if ... not in ms
+                          else f"`{_cls_name(c)}`: *" for c,ms in sorted(__pytools_cls__.items(), key=lambda x: _cls_name(x[0])) if ms)
+        meths_s = f'\n\n            Allowed methods by type: {meths}' if meths else ''
         return f"""Execute restricted Python with access to LLM tools, returning last expression.
             `import` works in the usual way. All non-callable globals and non-callable attrs are usable.
             Callable globals are also usable if their name ends with `_` (but not `_`-prefixed).
             - This is an easy way for users to expose extra functions: `def my_helper_(...)`
             Callable object attrs are only accessible if `ClassName.method` is registered as a tool.
             Multiline code blocks can be used, including defining functions and variables, for use within the call.
-            In addition most builtins are available, plus these symbols: {tools}
+            In addition most builtins are available, plus these symbols: {tools}{meths_s}
 
             **NB**: If `code` creates symbols that end with `_`, they will be exported by to the calling namespace.
             - This is how you can use symbols that either human or AI can use again later.
@@ -295,6 +303,12 @@ def create_pyrun_magic(shell=None, pyrun=None):
 def safe_type(o:object):
     "Same as `type(o)`"
     return type(o)
+
+def doc(sym  # Symbol to retrieve docs for
+)->str:
+    """Get documentation (signature, docstring, + docments if they exist) for `sym`.
+    **NB**: This is not an llm tool, so must be run with `%%py` or `pyrun()`. `sym` must be available in the namespace."""
+    return str(MarkdownRenderer(sym))
 
 # %% ../nbs/00_core.ipynb #7df0c1fe
 _io_meths = ['getvalue', 'read', 'write', 'seek']
@@ -339,7 +353,9 @@ allow({
         'getitem', 'mod', 'eq', 'ne', 'lt', 'gt', 'or_', 'and_', 'not_', 'pow', 'floordiv', 'xor'],
     frozenset: ['intersection', 'union', 'difference', 'symmetric_difference', 'issubset', 'issuperset', 'copy'],
     StringIO: _io_meths, BytesIO: _io_meths,
-    }, 'urlencode', 'quote', 'unquote', 'string', 'safe_type', 'display','HTML','Markdown','Image','Pretty','SVG'
+    },
+    'urlencode', 'quote', 'unquote', 'string', 'safe_type', 'display','HTML','Markdown','Image','Pretty','SVG',
+    'help','dir','doc'
 )
 
 # %% ../nbs/00_core.ipynb #67b9faa7
