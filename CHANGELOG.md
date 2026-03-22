@@ -2,6 +2,13 @@
 
 <!-- do not remove -->
 
+## 0.0.16
+
+### New Features
+
+- Add sdir/doc helpers, expose help/dir/doc as pytools, and broaden local var export to globals ([#17](https://github.com/AnswerDotAI/safepyrun/issues/17))
+
+
 ## 0.0.15
 
 ### New Features
