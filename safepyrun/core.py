@@ -3,8 +3,7 @@
 # %% auto #0
 __all__ = ['all_builtins', 'ALLOWED_DUNDERS', 'default_ok_dests', 'find_var', 'allow', 'chk_dest', 'WritePolicy',
            'PosWritePolicy', 'PathWritePolicy', 'OpenWritePolicy', 'allow_write', 'allow_write_types', 'sdir',
-           'SafeTransformer', 'RunPython', 'create_pyrun_magic', 'safe_type', 'doc', 'allow_matplotlib',
-           'load_ipython_extension']
+           'SafeTransformer', 'RunPython', 'create_pyrun_magic', 'doc', 'allow_matplotlib', 'load_ipython_extension']
 
 # %% ../nbs/00_core.ipynb #468aa264
 from fastcore.utils import *
@@ -15,7 +14,7 @@ from inspect import currentframe,Parameter,signature
 from contextvars import ContextVar
 
 import json,importlib,linecache,re,inspect,uuid,ast,warnings,collections,time,asyncio,urllib.parse,dataclasses,shlex,urllib
-import zlib,unicodedata,binascii,enum,secrets,pickle,contextlib,types,keyword,httpx
+import zlib,unicodedata,binascii,enum,secrets,pickle,contextlib,types,keyword,httpx,operator
 import heapq, bisect, html, struct, decimal, fractions, pprint, fnmatch, base64
 import random, statistics, difflib, csv, string, textwrap, hashlib, copy, datetime as dt_mod
 import xml.etree.ElementTree as ET,ipaddress,colorsys,cmath,traceback,sys,shutil
@@ -217,6 +216,18 @@ class SafeTransformer(RestrictingNodeTransformer):
             return node
         else: raise NotImplementedError(f"Unknown ctx type: {type(node.ctx)}")
 
+# %% ../nbs/00_core.ipynb #e8365db0
+_inplace_ops = {
+    '+=': operator.iadd, '-=': operator.isub, '*=': operator.imul,
+    '/=': operator.itruediv, '//=': operator.ifloordiv, '%=': operator.imod,
+    '**=': operator.ipow, '<<=': operator.ilshift, '>>=': operator.irshift,
+    '&=': operator.iand, '|=': operator.ior, '^=': operator.ixor,
+    '@=': operator.imatmul,
+}
+
+def _inplacevar_(op, x, y): return _inplace_ops[op](x, y)
+def _safe_type(o:object): return type(o)
+
 # %% ../nbs/00_core.ipynb #55cc6157
 async def _run_python(code:str, g=None, ok_dests=None):
     _rp_globals.set(g)
@@ -229,11 +240,12 @@ async def _run_python(code:str, g=None, ok_dests=None):
         safe_open = _safe_open(ok_dests)
         builtins['open'] = safe_open
     rg = dict(__builtins__=builtins, _getattr_=_make_safe_getattr(ok_dests),
-              _getitem_=lambda o,k: o[k], _getiter_=iter, _apply_ = lambda f, *a, **kw: f(*a, **kw),
-              _write_=_default_write_, __metaclass__=type, __name__='<tool>',
-              _print_=_DirectPrint, _print=_DirectPrint(),
-              _unpack_sequence_=unpack, _iter_unpack_sequence_=unpack,
-              enumerate=enumerate, sorted=sorted, reversed=reversed, max=max, min=min, **tools)
+        _inplacevar_ = _inplacevar_, type = _safe_type,
+        _getitem_=lambda o,k: o[k], _getiter_=iter, _apply_ = lambda f, *a, **kw: f(*a, **kw),
+        _write_=_default_write_, __metaclass__=type, __name__='<tool>',
+        _print_=_DirectPrint, _print=_DirectPrint(),
+        _unpack_sequence_=unpack, _iter_unpack_sequence_=unpack,
+        enumerate=enumerate, sorted=sorted, reversed=reversed, max=max, min=min, **tools)
     if ok_dests is not None: rg['open'] = safe_open
     loc = {}
     async def run(src, is_exec=True):
@@ -299,11 +311,10 @@ def create_pyrun_magic(shell=None, pyrun=None):
         return pyrun(cell)
     shell.register_magic_function(f, 'line_cell', 'py')
 
-# %% ../nbs/00_core.ipynb #2303931f
-def safe_type(o:object):
-    "Same as `type(o)`"
-    return type(o)
+# %% ../nbs/00_core.ipynb #d2e5b93e
+allow_write_types(dict, list, SimpleNamespace)
 
+# %% ../nbs/00_core.ipynb #b27c499a
 def doc(sym  # Symbol to retrieve docs for
 )->str:
     """Get documentation (signature, docstring, + docments if they exist) for `sym`.
