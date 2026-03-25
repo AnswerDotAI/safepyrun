@@ -2,6 +2,13 @@
 
 <!-- do not remove -->
 
+## 0.0.17
+
+### New Features
+
+- Add in-place operator support and safe type() override to sandbox ([#18](https://github.com/AnswerDotAI/safepyrun/issues/18))
+
+
 ## 0.0.16
 
 ### New Features
