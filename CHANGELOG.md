@@ -2,6 +2,14 @@
 
 <!-- do not remove -->
 
+## 0.0.18
+
+### New Features
+
+- Add `_WriteGuard` proxy, expand allowlist to use `...` for full module access, tighten callable permissions and `_` suffix semantics ([#20](https://github.com/AnswerDotAI/safepyrun/issues/20))
+- Add `sum` and `hasattr` ([#19](https://github.com/AnswerDotAI/safepyrun/issues/19))
+
+
 ## 0.0.17
 
 ### New Features
