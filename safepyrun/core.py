@@ -145,9 +145,9 @@ def sdir(o): return [a for a in dir(o) if not a.startswith('_')]
 
 all_builtins = safe_builtins | utility_builtins | limited_builtins | async_builtins | dict(
     dict=dict, list=list, set=set, tuple=tuple, frozenset=frozenset,
-    iter=iter, next=next,
     __import__=__import__,
-    help=help, dir=sdir
+    iter=iter, next=next,
+    help=help, dir=sdir, sum=sum
 )
 
 # %% ../nbs/00_core.ipynb #069afe1c
