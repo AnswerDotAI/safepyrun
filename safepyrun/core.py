@@ -24,6 +24,7 @@ from io import StringIO,BytesIO
 from collections import Counter,deque,OrderedDict
 from IPython.display import display,HTML,Markdown,Image,Pretty,SVG
 from types import SimpleNamespace
+from re import Pattern
 
 # %% ../nbs/00_core.ipynb #f178e529
 from fastcore.imports import __llmtools__
@@ -118,9 +119,27 @@ def allow_write_types(*types):
     "Allow in-place mutation of instances of these types (and their subclasses via isinstance)"
     __pytools_write_types__.update(types)
 
+class _WriteGuard:
+    "Proxy that allows item/attr mutation but blocks setting attrs to callables"
+    def __init__(self, obj): object.__setattr__(self, '_obj', obj)
+    def _chk_globals(self):
+        o = object.__getattribute__(self, '_obj')
+        if isinstance(o, dict) and '__builtins__' in o:
+            raise PermissionError("Cannot mutate globals/frame dicts")
+    def __setattr__(self, name, val):
+        if callable(val): raise PermissionError(f"Setting attribute '{name}' to a callable is not allowed")
+        setattr(object.__getattribute__(self, '_obj'), name, val)
+    def __delattr__(self, name): delattr(object.__getattribute__(self, '_obj'), name)
+    def __setitem__(self, key, val):
+        self._chk_globals()
+        object.__getattribute__(self, '_obj')[key] = val
+    def __delitem__(self, key):
+        self._chk_globals()
+        del object.__getattribute__(self, '_obj')[key]
+
 def _default_write_(obj):
-    "Guard for in-place mutation; allows only registered types"
-    if isinstance(obj, tuple(__pytools_write_types__)): return obj
+    "Guard for in-place mutation; allows only registered types, blocks setting attrs to callables"
+    if isinstance(obj, tuple(__pytools_write_types__)): return _WriteGuard(obj)
     raise PermissionError(f"Write to {type(obj).__name__} not allowed in sandbox")
 
 # %% ../nbs/00_core.ipynb #703cdc90
@@ -146,7 +165,7 @@ def sdir(o): return [a for a in dir(o) if not a.startswith('_')]
 all_builtins = safe_builtins | utility_builtins | limited_builtins | async_builtins | dict(
     dict=dict, list=list, set=set, tuple=tuple, frozenset=frozenset,
     __import__=__import__,
-    iter=iter, next=next,
+    iter=iter, next=next, hasattr=hasattr,
     help=help, dir=sdir, sum=sum
 )
 
@@ -182,7 +201,7 @@ class _Uncallable:
     def __repr__(self): return repr(self._o)
 
 def _callable_ok(k, v, _ok):
-    if k.endswith('_') or k in _ok: return True
+    if k in _ok: return True
     if v in __pytools_cls__: return True
     if any(c in __pytools_cls__ for c in type(v).__mro__): return True
     mod,qn = getattr(v, '__module__', None), getattr(v, '__qualname__', None)
@@ -287,8 +306,7 @@ class RunPython:
         meths_s = f'\n\n            Allowed methods by type: {meths}' if meths else ''
         return f"""Execute restricted Python with access to LLM tools, returning last expression.
             `import` works in the usual way. All non-callable globals and non-callable attrs are usable.
-            Callable globals are also usable if their name ends with `_` (but not `_`-prefixed).
-            - This is an easy way for users to expose extra functions: `def my_helper_(...)`
+            Callable globals are usable only if explicitly registered as tools.
             Callable object attrs are only accessible if `ClassName.method` is registered as a tool.
             Multiline code blocks can be used, including defining functions and variables, for use within the call.
             In addition most builtins are available, plus these symbols: {tools}{meths_s}
@@ -321,9 +339,6 @@ def doc(sym  # Symbol to retrieve docs for
     **NB**: This is not an llm tool, so must be run with `%%py` or `pyrun()`. `sym` must be available in the namespace."""
     return str(MarkdownRenderer(sym))
 
-# %% ../nbs/00_core.ipynb #7df0c1fe
-_io_meths = ['getvalue', 'read', 'write', 'seek']
-
 # %% ../nbs/00_core.ipynb #1d75894f
 from io import TextIOWrapper,BufferedWriter,BufferedRandom,FileIO
 
@@ -333,37 +348,15 @@ allow({TextIOWrapper: _file_meths, BufferedWriter: _file_meths, BufferedRandom: 
 
 # %% ../nbs/00_core.ipynb #67713a82
 allow({
-    re: ['search', 'findall', 'sub', 'match', 'compile', 'split', 'escape', 'fullmatch', 'subn'],
+    re: ..., math: ..., collections: ..., copy: ...,
+    tuple: ..., float: ..., str: ..., bytes: ..., int: ..., frozenset: ...,
+    Counter: ..., itertools: ..., functools: ..., textwrap: ...,
+    datetime: ..., dt_mod: ..., operator: ...,
+    StringIO: ..., BytesIO: ..., dict: ..., list: ..., set: ...,
     json: ['loads', 'dumps', 'load'],
-    math: ['sqrt', 'floor', 'ceil', 'log', 'log2', 'log10', 'gcd', 'isnan', 'isinf',
-        'exp', 'sin', 'cos', 'tan', 'atan2', 'radians', 'degrees', 'factorial', 'comb', 'perm', 'prod', 'isclose',
-        'fsum', 'hypot', 'isfinite', 'copysign'],
-    collections: ['Counter', 'defaultdict', 'deque', 'namedtuple', 'OrderedDict', 'ChainMap'],
-    tuple: ['index', 'count'],
-    float: ['is_integer', 'fromhex'],
-    Counter: ['most_common'],
-    dict: ['keys', 'values', 'items', 'get', 'update', 'pop', 'setdefault', 'copy'],
-    list: ['append', 'copy', 'extend', 'index', 'insert', 'pop', 'remove', 'reverse', 'sort', 'count'],
-    set: ['add', 'discard', 'intersection', 'union', 'difference', 'update',
-        'symmetric_difference', 'issubset', 'issuperset', 'copy', 'pop', 'remove'],
-    str: ['split', 'join', 'replace', 'strip', 'lstrip', 'rstrip', 'startswith', 'endswith', 'lower', 'upper',
-        'find', 'count', 'format', 'isdigit', 'isalpha', 'title', 'encode', 'splitlines', 'removeprefix', 'removesuffix',
-        'zfill', 'center', 'ljust', 'rjust', 'maketrans', 'translate', 'casefold', 'partition', 'rpartition'],
-    bytes: ['decode', 'fromhex', 'hex'],
-    int: ['to_bytes', 'from_bytes', 'bit_length'],
     Path: ['expanduser', 'read_text', 'glob', 'iterdir', 'exists', 'read_bytes', 'is_file', 'is_dir', 'stat', 'resolve',
         'with_suffix', 'with_name', 'relative_to', 'match', 'joinpath'],
-    asyncio: ['gather','sleep'], copy: ['deepcopy'], httpx: ['get', 'options'],
-    itertools: ['chain', 'islice', 'groupby', 'product', 'permutations', 'combinations', 'accumulate', 'starmap', 'zip_longest',
-        'pairwise', 'takewhile', 'dropwhile', 'filterfalse', 'compress', 'count', 'repeat', 'cycle', 'tee', 'batched'],
-    functools: ['reduce', 'partial', 'lru_cache', 'cache', 'wraps', 'cmp_to_key', 'total_ordering'],
-    textwrap: ['dedent', 'indent', 'wrap', 'shorten', 'fill'],
-    datetime: ['now', 'fromisoformat', 'strftime', 'strptime', 'isoformat'],
-    dt_mod: ['timedelta', 'date', 'time', 'timezone'],
-    operator: ['itemgetter', 'attrgetter', 'add', 'mul', 'sub', 'truediv', 'neg', 'contains',
-        'getitem', 'mod', 'eq', 'ne', 'lt', 'gt', 'or_', 'and_', 'not_', 'pow', 'floordiv', 'xor'],
-    frozenset: ['intersection', 'union', 'difference', 'symmetric_difference', 'issubset', 'issuperset', 'copy'],
-    StringIO: _io_meths, BytesIO: _io_meths,
+    asyncio: ['gather','sleep'], httpx: ['get', 'options'],
     },
     'urlencode', 'quote', 'unquote', 'string', 'safe_type', 'display','HTML','Markdown','Image','Pretty','SVG',
     'help','dir','doc'
@@ -371,43 +364,18 @@ allow({
 
 # %% ../nbs/00_core.ipynb #67b9faa7
 allow({
-    os.path: ['join', 'basename', 'dirname', 'splitext', 'exists', 'isfile', 'isdir', 'abspath',
-        'relpath', 'expanduser', 'normpath'],
-    base64: ['b64encode', 'b64decode', 'urlsafe_b64encode', 'urlsafe_b64decode'],
-    hashlib: ['md5', 'sha256'],
-    random: ['choice', 'randint', 'sample', 'shuffle', 'uniform', 'random'],
-    statistics: ['mean', 'median', 'stdev'],
-    difflib: ['unified_diff', 'ndiff'],
+    os.path: ..., base64: ..., hashlib: ..., random: ..., statistics: ..., difflib: ...,
+    heapq: ..., bisect: ..., html: ..., struct: ..., fnmatch: ..., time: ..., deque: ...,
+    urllib.parse: ..., dataclasses: ..., shlex: ..., zlib: ..., unicodedata: ..., binascii: ...,
+    enum: ..., secrets: ..., ast: ..., inspect: ..., keyword: ...,
+    ipaddress: ..., colorsys: ..., cmath: ..., decimal: ..., fractions: ...,
+    uuid: ..., pprint: ..., types: ..., traceback: ..., warnings: ..., Pattern: ...,
     csv: ['reader', 'DictReader'],
-    heapq: ['nlargest', 'nsmallest', 'heappush', 'heappop'],
-    bisect: ['bisect_left', 'bisect_right', 'insort'],
-    html: ['escape', 'unescape'],
-    struct: ['pack', 'unpack'],
-    fnmatch: ['fnmatch', 'filter'],
-    time: ['time', 'perf_counter', 'sleep'],
-    urllib.parse: ['urlparse', 'parse_qs', 'parse_qsl', 'urlunparse', 'urljoin', 'quote_plus', 'unquote_plus'],
-    dataclasses: ['dataclass', 'field', 'asdict', 'fields', 'replace', 'is_dataclass'],
-    shlex: ['split', 'quote'],
-    zlib: ['compress', 'decompress', 'crc32'],
-    unicodedata: ['name', 'lookup', 'category', 'normalize'],
-    binascii: ['hexlify', 'unhexlify'],
-    enum: ['Enum', 'IntEnum'],
-    secrets: ['token_hex', 'token_urlsafe'],
-    deque: ['appendleft', 'popleft', 'rotate', 'extendleft'],
-    ast: ['literal_eval', 'parse', 'dump', 'walk', 'unparse'],
     pickle: ['loads', 'dumps'],
     contextlib: ['suppress', 'contextmanager'],
-    inspect: ['getsource', 'getsourcefile', 'getsourcelines', 'getmodule', 'getdoc', 'getmembers',
-        'signature', 'isclass', 'isfunction', 'ismethod', 'ismodule', 'getfile'],
-    keyword: ['iskeyword', 'kwlist'],
     ET: ['fromstring', 'tostring'],
     ET.Element: ['findall', 'find', 'get', 'iter'],
-    ipaddress: ['ip_address', 'ip_network'],
-    colorsys: ['rgb_to_hsv', 'hsv_to_rgb', 'rgb_to_hls'],
-    cmath: ['phase', 'polar', 'rect', 'sqrt'],
-    decimal: ['Decimal'], fractions: ['Fraction'],
-    uuid: ['uuid4'], pprint: ['pformat'], types: ['SimpleNamespace'],
-    traceback: ['format_exc'], sys: ['getsizeof'], warnings: ['warn'],
+    sys: ['getsizeof'],
 })
 
 # %% ../nbs/00_core.ipynb #2324abe0
