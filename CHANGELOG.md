@@ -2,6 +2,13 @@
 
 <!-- do not remove -->
 
+## 0.0.19
+
+### New Features
+
+- Unify `__pytools__`, `__pytools_cls__`, `__pytools_write__` into single defaultdict; use `__call__` instead of .check() on WritePolicy ([#21](https://github.com/AnswerDotAI/safepyrun/issues/21))
+
+
 ## 0.0.18
 
 ### New Features
