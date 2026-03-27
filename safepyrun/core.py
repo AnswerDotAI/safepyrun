@@ -2,8 +2,8 @@
 
 # %% auto #0
 __all__ = ['all_builtins', 'ALLOWED_DUNDERS', 'default_ok_dests', 'find_var', 'allow', 'chk_dest', 'WritePolicy',
-           'PosWritePolicy', 'PathWritePolicy', 'OpenWritePolicy', 'allow_write', 'allow_write_types', 'sdir',
-           'SafeTransformer', 'RunPython', 'create_pyrun_magic', 'doc', 'allow_matplotlib', 'load_ipython_extension']
+           'PosWritePolicy', 'PathWritePolicy', 'OpenWritePolicy', 'allow_write_types', 'sdir', 'SafeTransformer',
+           'RunPython', 'create_pyrun_magic', 'doc', 'allow_matplotlib', 'load_ipython_extension']
 
 # %% ../nbs/00_core.ipynb #468aa264
 from fastcore.utils import *
@@ -56,22 +56,32 @@ def find_var(var:str):
     return _find_frame_dict(var)[var]
 
 # %% ../nbs/00_core.ipynb #947e6c21
-__pytools__ = {'pyrun'}
-__pytools_cls__ = collections.defaultdict(set)
+__pytools__ = collections.defaultdict(set)
+
+def _name_in(s, name):
+    if ... in s or name in s: return True
+    return any(isinstance(x, tuple) and x[0] == name for x in s)
+
+def _get_policy(s, name):
+    for x in s:
+        if isinstance(x, tuple) and x[0] == name: return x[1]
+    return None
 
 def _cls_ok(obj, name):
     for o in [obj] + list(type(obj).__mro__):
-        # obj may be unhashable (e.g. dict, list, ndarray) but modules/classes are valid keys
-        try: s = __pytools_cls__.get(o)
+        try: s = __pytools__.get(o)
         except TypeError: continue
-        if s and (... in s or name in s): return True
+        if s and _name_in(s, name): return True
     return False
 
 def allow(*c):
     for o in c:
         if isinstance(o, dict):
-            for k,v in o.items(): __pytools_cls__[k].update(listify(v))
-        else: __pytools__.add(o)
+            for k,v in o.items(): __pytools__[k].update(listify(v))
+        else:
+            mod = sys.modules.get(getattr(o, '__module__', '__main__'), sys.modules.get('__main__'))
+            __pytools__[mod].add(o.__name__)
+    if len(c)==1 and callable(c[0]): return c[0]
 
 # %% ../nbs/00_core.ipynb #eb580254
 def chk_dest(p, ok_dests):
@@ -82,35 +92,28 @@ def chk_dest(p, ok_dests):
 # %% ../nbs/00_core.ipynb #8146b916
 class WritePolicy:
     "Base for write destination policies"
-    def check(self, obj, args, kwargs, ok_dests): raise NotImplementedError
+    def __call__(self, obj, args, kwargs, ok_dests): raise NotImplementedError
 
 class PosWritePolicy(WritePolicy):
     "Check positional/keyword arg is an allowed write destination"
     def __init__(self, pos=0, kw=None): store_attr()
-    def check(self, obj, args, kwargs, ok_dests):
+    def __call__(self, obj, args, kwargs, ok_dests):
         p = kwargs.get(self.kw) if self.kw and self.kw in kwargs else args[self.pos] if self.pos < len(args) else None
         if p is not None: chk_dest(p, ok_dests)
 
 class PathWritePolicy(WritePolicy):
     "Check resolved Path self, optionally also target args"
     def __init__(self, target_pos=None, target_kw=None): store_attr()
-    def check(self, obj, args, kwargs, ok_dests):
+    def __call__(self, obj, args, kwargs, ok_dests):
         chk_dest(obj, ok_dests)
         if self.target_pos is not None and self.target_pos < len(args): chk_dest(args[self.target_pos], ok_dests)
         if self.target_kw and self.target_kw in kwargs: chk_dest(kwargs[self.target_kw], ok_dests)
 
 class OpenWritePolicy(WritePolicy):
     "Check open() only when mode is writable"
-    def check(self, obj, args, kwargs, ok_dests):
+    def __call__(self, obj, args, kwargs, ok_dests):
         mode = kwargs.get('mode', args[1] if len(args) > 1 else 'r')
         if any(c in mode for c in 'wax+'): chk_dest(args[0] if args else kwargs.get('file'), ok_dests)
-
-# %% ../nbs/00_core.ipynb #bc2debd2
-__pytools_write__ = {}
-
-def allow_write(policies):
-    "Register write policies for method/function names"
-    __pytools_write__.update(policies)
 
 # %% ../nbs/00_core.ipynb #b0f8587e
 __pytools_write_types__ = set()
@@ -147,7 +150,7 @@ class _WriteChecked:
     "Wrap a method to enforce its WritePolicy before calling"
     def __init__(self, obj, method, policy, ok_dests): self.obj,self.method,self.policy,self.ok_dests = obj,method,policy,ok_dests
     def __call__(self, *args, **kwargs):
-        self.policy.check(self.obj, args, kwargs, self.ok_dests)
+        self.policy(self.obj, args, kwargs, self.ok_dests)
         return self.method(*args, **kwargs)
 
 # %% ../nbs/00_core.ipynb #2a097981
@@ -155,7 +158,7 @@ _open_policy = OpenWritePolicy()
 
 def _safe_open(ok_dests):
     def _open(*args, **kwargs):
-        _open_policy.check(None, args, kwargs, ok_dests)
+        _open_policy(None, args, kwargs, ok_dests)
         return open(*args, **kwargs)
     return _open
 
@@ -170,20 +173,31 @@ all_builtins = safe_builtins | utility_builtins | limited_builtins | async_built
 )
 
 # %% ../nbs/00_core.ipynb #069afe1c
+def _get_write_policy(obj, name):
+    for o in [obj] + list(type(obj).__mro__):
+        try: s = __pytools__.get(o)
+        except TypeError: continue
+        if s:
+            p = _get_policy(s, name)
+            if p is not None: return p
+    return None
+
 def _make_safe_getattr(ok_dests=None):
     def _safe_getattr(obj, name):
         val = getattr(obj, name)
         if callable(val):
-            keys = [f"{cls.__name__}.{name}" for cls in type(obj).__mro__]
-            keys += [f"{cls.__module__}.{cls.__qualname__}.{name}" for cls in type(obj).__mro__ if hasattr(cls, '__module__')]
-            obj_name = getattr(obj, '__name__', None)
-            if obj_name: keys.append(f"{obj_name}.{name}")
             if ok_dests is not None:
-                for k in keys:
-                    if k in __pytools_write__: return _WriteChecked(obj, val, __pytools_write__[k], ok_dests)
-            if not (_cls_ok(obj, name) or any(k in (__llmtools__|__pytools__) for k in keys)): raise AttributeError(f"Cannot access callable: {name}")
+                p = _get_write_policy(obj, name)
+                if p is not None: return _WriteChecked(obj, val, p, ok_dests)
+            if not _cls_ok(obj, name):
+                keys = [f"{cls.__name__}.{name}" for cls in type(obj).__mro__]
+                keys += [f"{cls.__module__}.{cls.__qualname__}.{name}" for cls in type(obj).__mro__ if hasattr(cls, '__module__')]
+                obj_name = getattr(obj, '__name__', None)
+                if obj_name: keys.append(f"{obj_name}.{name}")
+                if not any(k in __llmtools__ for k in keys): raise AttributeError(f"Cannot access callable: {name}")
         return val
     return _safe_getattr
+
 
 # %% ../nbs/00_core.ipynb #6becac3b
 class _DirectPrint:
@@ -200,16 +214,14 @@ class _Uncallable:
     def __getattr__(self, name): return getattr(self._o, name)
     def __repr__(self): return repr(self._o)
 
-def _callable_ok(k, v, _ok):
-    if k in _ok: return True
-    if v in __pytools_cls__: return True
-    if any(c in __pytools_cls__ for c in type(v).__mro__): return True
-    mod,qn = getattr(v, '__module__', None), getattr(v, '__qualname__', None)
-    if mod and qn:
-        m = sys.modules.get(mod)
-        if m and _cls_ok(m, qn): return True
-        return f"{mod}.{qn}" in _ok
+def _callable_ok(k, v):
+    if k in __llmtools__: return True
+    if v in __pytools__: return True
+    if any(c in __pytools__ for c in type(v).__mro__): return True
+    mod = sys.modules.get(getattr(v, '__module__', None))
+    if mod and _cls_ok(mod, getattr(v, '__qualname__', k)): return True
     return False
+
 
 # %% ../nbs/00_core.ipynb #3e4ede6c
 ALLOWED_DUNDERS = {'__name__', '__module__', '__doc__', '__qualname__', '__file__'}
@@ -250,8 +262,7 @@ def _safe_type(o:object): return type(o)
 # %% ../nbs/00_core.ipynb #55cc6157
 async def _run_python(code:str, g=None, ok_dests=None):
     _rp_globals.set(g)
-    _ok = __llmtools__|__pytools__
-    tools = {k:(v if not callable(v) or _callable_ok(k,v,_ok) else _Uncallable(v,k))
+    tools = {k:(v if not callable(v) or _callable_ok(k,v) else _Uncallable(v,k))
         for k,v in g.items() if not k.startswith('_')}
     def unpack(a,*args): return list(a)
     builtins = dict(all_builtins)
@@ -299,10 +310,16 @@ class RunPython:
 
     @property
     def __doc__(self):
-        tools = ', '.join(sorted(__llmtools__|__pytools__))
         def _cls_name(o): return getattr(o, '__name__', None) or getattr(o, '__qualname__', str(o))
-        meths = '; '.join(f"`{_cls_name(c)}`: {', '.join(sorted(m for m in ms if m is not ...))}" if ... not in ms
-                          else f"`{_cls_name(c)}`: *" for c,ms in sorted(__pytools_cls__.items(), key=lambda x: _cls_name(x[0])) if ms)
+        def _meth_name(m): return m[0] if isinstance(m, tuple) else m
+        all_names = set(__llmtools__)
+        for ms in __pytools__.values():
+            for m in ms:
+                n = _meth_name(m)
+                if n is not ...: all_names.add(n)
+        tools = ', '.join(sorted(all_names))
+        meths = '; '.join(f"`{_cls_name(c)}`: {', '.join(sorted(str(_meth_name(m)) for m in ms if _meth_name(m) is not ...))}" if ... not in ms
+                          else f"`{_cls_name(c)}`: *" for c,ms in sorted(__pytools__.items(), key=lambda x: _cls_name(x[0])) if ms)
         meths_s = f'\n\n            Allowed methods by type: {meths}' if meths else ''
         return f"""Execute restricted Python with access to LLM tools, returning last expression.
             `import` works in the usual way. All non-callable globals and non-callable attrs are usable.
@@ -358,9 +375,9 @@ allow({
         'with_suffix', 'with_name', 'relative_to', 'match', 'joinpath'],
     asyncio: ['gather','sleep'], httpx: ['get', 'options'],
     },
-    'urlencode', 'quote', 'unquote', 'string', 'safe_type', 'display','HTML','Markdown','Image','Pretty','SVG',
-    'help','dir','doc'
+    urlencode, quote, unquote, display, HTML, Markdown, Image, Pretty, SVG, doc
 )
+
 
 # %% ../nbs/00_core.ipynb #67b9faa7
 allow({
@@ -381,15 +398,16 @@ allow({
 # %% ../nbs/00_core.ipynb #2324abe0
 _path_wp = PathWritePolicy()
 _dst1 = PosWritePolicy(1, 'dst')
+_rename_wp = PathWritePolicy(target_pos=0, target_kw='target')
 
-allow_write({
-    'Path.write_text': _path_wp, 'Path.write_bytes': _path_wp, 'Path.mkdir': _path_wp, 'Path.touch': _path_wp,
-    'Path.unlink': _path_wp, 'Path.rmdir': _path_wp, 'Path.chmod': _path_wp, 'Path.symlink_to': _path_wp, 'Path.hardlink_to': _path_wp,
-    'Path.rename': PathWritePolicy(target_pos=0, target_kw='target'),
-    'Path.replace': PathWritePolicy(target_pos=0, target_kw='target'),
-    'shutil.copy': _dst1, 'shutil.copy2': _dst1, 'shutil.copytree': _dst1, 'shutil.move': _dst1,
-    'shutil.rmtree': PosWritePolicy(0, 'path'),
+allow({
+    Path: [('write_text', _path_wp), ('write_bytes', _path_wp), ('mkdir', _path_wp), ('touch', _path_wp),
+        ('unlink', _path_wp), ('rmdir', _path_wp), ('chmod', _path_wp), ('symlink_to', _path_wp), ('hardlink_to', _path_wp),
+        ('rename', _rename_wp), ('replace', _rename_wp)],
+    shutil: [('copy', _dst1), ('copy2', _dst1), ('copytree', _dst1), ('move', _dst1),
+        ('rmtree', PosWritePolicy(0, 'path'))],
 })
+
 
 # %% ../nbs/00_core.ipynb #e2c7e67d
 _cfg_py = xdg_config_home() / 'safepyrun' / 'config.py'
@@ -420,10 +438,9 @@ def allow_matplotlib():
         Spine: ['set_visible'], SpinesProxy: ['set_visible'],
     })
 
-    allow_write({
-        'Figure.savefig': PosWritePolicy(0, 'fname'),
-        'matplotlib.pyplot.savefig': PosWritePolicy(0, 'fname'),
-    })
+    _savefig_wp = PosWritePolicy(0, 'fname')
+    allow({Figure: [('savefig', _savefig_wp)], plt: [('savefig', _savefig_wp)]})
+
 
 # %% ../nbs/00_core.ipynb #8d1cb417
 def load_ipython_extension(ip):
