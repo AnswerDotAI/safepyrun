@@ -74,14 +74,18 @@ def _cls_ok(obj, name):
         if s and _name_in(s, name): return True
     return False
 
-def allow(*c):
+def allow(*c, write_policy=None):
+    def _wrap(v):
+        if write_policy is None or v is ... or isinstance(v, tuple): return v
+        return (v, write_policy)
     for o in c:
         if isinstance(o, dict):
-            for k,v in o.items(): __pytools__[k].update(listify(v))
+            for k,v in o.items(): __pytools__[k].update(_wrap(x) for x in listify(v))
         else:
             mod = sys.modules.get(getattr(o, '__module__', '__main__'), sys.modules.get('__main__'))
-            __pytools__[mod].add(o.__name__)
+            __pytools__[mod].add(_wrap(o.__name__))
     if len(c)==1 and callable(c[0]): return c[0]
+
 
 # %% ../nbs/00_core.ipynb #eb580254
 def chk_dest(p, ok_dests):
@@ -401,12 +405,13 @@ _dst1 = PosWritePolicy(1, 'dst')
 _rename_wp = PathWritePolicy(target_pos=0, target_kw='target')
 
 allow({
-    Path: [('write_text', _path_wp), ('write_bytes', _path_wp), ('mkdir', _path_wp), ('touch', _path_wp),
-        ('unlink', _path_wp), ('rmdir', _path_wp), ('chmod', _path_wp), ('symlink_to', _path_wp), ('hardlink_to', _path_wp),
-        ('rename', _rename_wp), ('replace', _rename_wp)],
-    shutil: [('copy', _dst1), ('copy2', _dst1), ('copytree', _dst1), ('move', _dst1),
-        ('rmtree', PosWritePolicy(0, 'path'))],
-})
+    Path: ['write_text', 'write_bytes', 'mkdir', 'touch', 'unlink', 'rmdir', 'chmod', 'symlink_to', 'hardlink_to'],
+}, write_policy=_path_wp)
+allow({Path: [('rename', _rename_wp), ('replace', _rename_wp)]})
+allow({
+    shutil: ['copy', 'copy2', 'copytree', 'move'],
+}, write_policy=_dst1)
+allow({shutil: [('rmtree', PosWritePolicy(0, 'path'))]})
 
 
 # %% ../nbs/00_core.ipynb #e2c7e67d
