@@ -2,6 +2,13 @@
 
 <!-- do not remove -->
 
+## 0.0.20
+
+### New Features
+
+- Add `write_policy` param to allow() ([#22](https://github.com/AnswerDotAI/safepyrun/issues/22))
+
+
 ## 0.0.19
 
 ### New Features
