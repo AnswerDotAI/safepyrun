@@ -321,15 +321,13 @@ allow({
     tuple: ..., float: ..., str: ..., bytes: ..., int: ..., frozenset: ...,
     Counter: ..., itertools: ..., functools: ..., textwrap: ...,
     datetime: ..., dt_mod: ..., operator: ...,
-    StringIO: ..., BytesIO: ..., dict: ..., list: ..., set: ...,
-    json: ['loads', 'dumps', 'load'],
+    StringIO: ..., BytesIO: ..., dict: ..., list: ..., set: ..., json: ...,
     Path: ['expanduser', 'read_text', 'glob', 'iterdir', 'exists', 'read_bytes', 'is_file', 'is_dir', 'stat', 'resolve',
         'with_suffix', 'with_name', 'relative_to', 'match', 'joinpath'],
     asyncio: ['gather','sleep'], httpx: ['get', 'options'],
     },
     urlencode, quote, unquote, display, HTML, Markdown, Image, Pretty, SVG, doc
 )
-
 
 # %% ../nbs/00_core.ipynb #67b9faa7
 allow({
@@ -360,7 +358,6 @@ allow({
     shutil: ['copy', 'copy2', 'copytree', 'move'],
 }, allow_policy=_dst1)
 allow({shutil: [('rmtree', PosAllowPolicy(0, 'path'))]})
-
 
 # %% ../nbs/00_core.ipynb #e2c7e67d
 _cfg_py = xdg_config_home() / 'safepyrun' / 'config.py'
