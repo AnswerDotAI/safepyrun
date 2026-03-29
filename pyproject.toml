@@ -18,7 +18,7 @@ classifiers = [
 dependencies = [
   "restrictedpython-async",
   "restrictedpython",
-  "pyskills",
+  "pyskills>=0.0.2",
   "fastcore>=1.12.27",
   "httpx",
   "matplotlib>=3.10.8",
