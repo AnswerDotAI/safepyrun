@@ -2,6 +2,13 @@
 
 <!-- do not remove -->
 
+## 0.0.21
+
+### New Features
+
+- Use `pyskills` ([#23](https://github.com/AnswerDotAI/safepyrun/issues/23))
+
+
 ## 0.0.20
 
 ### New Features
