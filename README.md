@@ -83,22 +83,21 @@ RestrictedPython gives us the mechanism to enforce this: it rewrites the
 AST to intercept attribute access, iteration, and item access, so that
 every callable goes through an allowlist check.
 
-The allowlist has three tiers. First, a curated subset of the standard
+The allowlist has two tiers. First, a curated subset of the standard
 library that has been audited once so every user doesn’t have to repeat
 the work: things like `re`, `json`, `itertools`, `math`, `collections`,
 `pathlib` (read-only methods), and many more. Second, user-extended
-functions registered via
-[`allow()`](https://AnswerDotAI.github.io/safepyrun/core.html#allow), so
-you can opt in your own project’s functions and methods. Third, an LLM
-self-service mechanism: any symbol the LLM creates with a trailing
-underscore (like `helper_`) is automatically available in subsequent
-calls, letting it build up reusable utilities across a multi-step tool
-loop.
+functions registered via `allow()`, so you can opt in your own project’s
+functions and methods. Symbols the LLM creates with a trailing
+underscore (like `result_`) are exported back to the caller’s namespace
+for reuse, but must still be explicitly registered with `allow()` to be
+callable in subsequent sandbox calls.
 
 ## Usage
 
 ``` python
 from safepyrun import *
+from pyskills import *
 ```
 
 The main entry point is `pyrun = RunPython()`, which returns an async
@@ -115,7 +114,7 @@ pyrun = RunPython()
 await pyrun('1+1')
 ```
 
-    {'result': 2}
+    2
 
 You can mix `print()` output with a return value. The printed output
 goes to the `stdout` key, and the last expression becomes `result`:
@@ -124,7 +123,9 @@ goes to the `stdout` key, and the last expression becomes `result`:
 await pyrun('print("hello"); 1+1')
 ```
 
-    {'stdout': 'hello\n', 'result': 2}
+    hello
+
+    2
 
 Modules can be imported. stderr is also captured:
 
@@ -136,7 +137,9 @@ warnings.warn('a warning')
 ''')
 ```
 
-    {'stderr': '<tool>:2: UserWarning: a warning\n', 'result': 'ok'}
+    <tool>:2: UserWarning: a warning
+
+    'ok'
 
 A large subset of the standard library is available out of the box –
 things like `re`, `json`, `math`, `itertools`, `collections`, `pathlib`
@@ -147,7 +150,7 @@ every user doesn’t have to repeat the work:
 await pyrun('import re; re.findall(r"\\d+", "there are 3 cats and 10 dogs")')
 ```
 
-    {'result': ['3', '10']}
+    ['3', '10']
 
 The default allowlist covers text and data processing (`re`, `json`,
 `csv`, `html`, `textwrap`, `string`, `difflib`, `unicodedata`), math and
@@ -169,43 +172,41 @@ XML parsing
 and various utilities (`contextlib`, `copy`, `dataclasses`, `enum`,
 `secrets`, `uuid`, `pprint`, `shlex`, `colorsys`, `traceback`).
 
-### The [`allow()`](https://AnswerDotAI.github.io/safepyrun/core.html#allow) function
+### The `allow()` function
 
 Functions you define yourself or import from third-party packages are
 not automatically available. If the sandbox encounters an unregistered
 callable, it raises an error.
 
-To make a function available, register it with
-[`allow()`](https://AnswerDotAI.github.io/safepyrun/core.html#allow):
+To make a function available, register it with `allow()`:
 
 ``` python
 def greet(name): return f"Hello, {name}!"
 ```
 
 ``` python
-allow('greet')
+allow(greet) # Or use @allow decorator
 await pyrun('greet("World")')
 ```
 
-    {'result': 'Hello, World!'}
+    'Hello, World!'
 
 The same applies to anything you import from PyPI. For instance, if you
 wanted the LLM to be able to call
 [`numpy.array`](https://numpy.org/doc/stable/reference/generated/numpy.array.html#numpy.array),
 you would register it with `allow('numpy.array')`.
 
-[`allow()`](https://AnswerDotAI.github.io/safepyrun/core.html#allow)
-accepts two forms: strings and dicts. The simplest form is a bare
-string, which registers a single name. This works for standalone
+`allow()` accepts two forms: strings and dicts. The simplest form is a
+bare string, which registers a single name. This works for standalone
 functions in the caller’s namespace:
 
 ``` python
+@allow
 def double(x): return x * 2
-allow('double')
 await pyrun('double(21)')
 ```
 
-    {'result': 42}
+    42
 
 For methods on modules or classes, use dotted string syntax. The string
 should match how the sandbox will look up the callable, which is
@@ -216,11 +217,11 @@ import numpy as np
 ```
 
 ``` python
-allow('numpy.array', 'numpy.ndarray.sum')
+allow(np.array, np.ndarray.sum)
 await pyrun('np.array([1,2,3]).sum()')
 ```
 
-    {'result': 6}
+    6
 
 Note that the string must use the actual class or module name as it
 appears in Python, not the alias. In the example above, even though the
@@ -236,53 +237,49 @@ allow({np.ndarray: ['mean', 'reshape', 'tolist']})
 await pyrun('np.array([1,2,3,4]).reshape(2,2).mean()')
 ```
 
-    {'result': 2.5}
+    2.5
 
 The dict form does two things: it registers the class/module name itself
 (so it can be called as a constructor or accessed as a namespace), and
 it registers each `ClassName.method` pair. You can mix strings and dicts
-in a single
-[`allow()`](https://AnswerDotAI.github.io/safepyrun/core.html#allow)
-call:
+in a single `allow()` call:
 
 ``` python
 allow('my_func', {np.linalg: ['norm', 'det']})
 ```
 
-### The `_` suffix convention
+### The `_` suffix export convention
 
-There’s a third way callables become available in the sandbox: any
-symbol the LLM creates whose name ends with `_` (but doesn’t start with
-`_`) is automatically exported back to the caller’s namespace, and is
-available in subsequent `pyrun` calls. This means the LLM can build up
-reusable helper functions across a multi-step tool loop without
-requiring the user to register anything:
-
-``` python
-await pyrun('def clean_(s): return s.strip().lower()')
-```
-
-``` python
-await pyrun('clean_("  Hello World  ")')
-```
-
-    {'result': 'hello world'}
-
-The exported symbols are real objects in your namespace, not just
-available inside the sandbox. This works for variables too, not just
-functions:
+Any symbol the LLM creates whose name ends with `_` (but doesn’t start
+with `_`) is automatically exported back to the caller’s namespace. This
+is useful for building up data across multi-step tool loops. Note that
+exported callables are **not** automatically available to call in
+subsequent sandbox runs — they must still be registered with `allow()`
+to be callable. Non-callable exports (variables, data structures) are
+available immediately:
 
 ``` python
 await pyrun('result_ = [x**2 for x in range(5)]')
+```
+
+``` python
 result_
 ```
 
     [0, 1, 4, 9, 16]
 
+The exported symbols are real objects in your namespace:
+
+``` python
+await pyrun('counts_ = {"a": 1, "b": 2}')
+counts_
+```
+
+    {'a': 1, 'b': 2}
+
 This is particularly useful in LLM tool loops where the model might need
-to define a parsing function in one step and reuse it in several
-subsequent steps. Non-suffixed names remain local to the sandbox call
-and are not exported.
+to accumulate results across steps. Non-suffixed names remain local to
+the sandbox call and are not exported.
 
 ### Async support
 
@@ -300,16 +297,14 @@ await asyncio.gather(fetch(1), fetch(2), fetch(3))
 ''')
 ```
 
-    {'result': [10, 20, 30]}
+    [10, 20, 30]
 
 ## Writable path permissions
 
-By default,
-[`RunPython`](https://AnswerDotAI.github.io/safepyrun/core.html#runpython)
-blocks all filesystem writes. To enable controlled writing, pass
-`ok_dests` — a list of directory prefixes where writes are permitted.
-Writing to an allowed destination works normally, but writing anywhere
-else raises `PermissionError`:
+By default, `RunPython` blocks all filesystem writes. To enable
+controlled writing, pass `ok_dests` — a list of directory prefixes where
+writes are permitted. Writing to an allowed destination works normally,
+but writing anywhere else raises `PermissionError`:
 
 ``` python
 pyrun2 = RunPython(ok_dests=['/tmp'])
@@ -323,14 +318,14 @@ from pathlib import Path
 await pyrun2("Path('/tmp/test_write.txt').write_text('hello')")
 ```
 
-    {'result': 5}
+    5
 
 ``` python
 try: await pyrun2("Path('/etc/evil.txt').write_text('bad')")
 except PermissionError as e: print(f'Blocked: {e}')
 ```
 
-    Blocked: Write to '/etc/evil.txt' not allowed; permitted: ['/tmp']
+    Blocked: Dest '/etc/evil.txt' not allowed; permitted: ['/tmp']
 
 The same permission checking applies to `open()` in write mode, not just
 `Path` methods:
@@ -339,14 +334,14 @@ The same permission checking applies to `open()` in write mode, not just
 await pyrun2("open('/tmp/test_open.txt', 'w').write('hi')")
 ```
 
-    {'result': 2}
+    2
 
 ``` python
 try: await pyrun2("open('/root/bad.txt', 'w')")
 except PermissionError as e: print(f'Blocked: {e}')
 ```
 
-    Blocked: Write to '/root/bad.txt' not allowed; permitted: ['/tmp']
+    Blocked: Dest '/root/bad.txt' not allowed; permitted: ['/tmp']
 
 Read access is unaffected — only writes are gated:
 
@@ -354,7 +349,7 @@ Read access is unaffected — only writes are gated:
 await pyrun2("open('/etc/passwd', 'r').read(10)")
 ```
 
-    {'result': '##\n# User '}
+    '##\n# User '
 
 Higher-level file operations like
 [`shutil.copy`](https://docs.python.org/3/library/shutil.html#shutil.copy)
@@ -364,26 +359,22 @@ are also intercepted. The destination is checked against `ok_dests`:
 await pyrun2("import shutil; shutil.copy('/tmp/test_write.txt', '/tmp/test_copy.txt')")
 ```
 
-    {'result': '/tmp/test_copy.txt'}
+    '/tmp/test_copy.txt'
 
 ``` python
 try: await pyrun2("import shutil; shutil.copy('/tmp/test_write.txt', '/root/bad.txt')")
 except PermissionError as e: print(f'Blocked: {e}')
 ```
 
-    Blocked: Write to '/root/bad.txt' not allowed; permitted: ['/tmp']
+    Blocked: Dest '/root/bad.txt' not allowed; permitted: ['/tmp']
 
-Without `ok_dests`, the default
-[`RunPython`](https://AnswerDotAI.github.io/safepyrun/core.html#runpython)
-instance blocks all write operations entirely — `Path.write_text` isn’t
-even callable:
+Without `ok_dests`, the default `RunPython` instance blocks all write
+operations entirely — `Path.write_text` isn’t even callable:
 
 ``` python
 try: await pyrun("Path('/tmp/test.txt').write_text('nope')")
 except AttributeError as e: print(f'No ok_dests: {e}')
 ```
-
-    No ok_dests: Cannot access callable: write_text
 
 You can use `'.'` to allow writes relative to the current working
 directory. Path traversal attempts (`../`, `subdir/../../`) are detected
@@ -396,7 +387,7 @@ pyrun_cwd = RunPython(ok_dests=['.'])
 await pyrun_cwd("Path('test_cwd_ok.txt').write_text('hello')")
 ```
 
-    {'result': 5}
+    5
 
 ``` python
 Path('test_cwd_ok.txt').unlink(missing_ok=True)
@@ -426,70 +417,60 @@ except PermissionError: print("Blocked ../ as expected")
 When `ok_dests` is set, safepyrun uses write policies to determine how
 to validate each callable’s destination arguments. Three built-in policy
 classes cover common patterns: checking a positional or keyword argument
-([`PosWritePolicy`](https://AnswerDotAI.github.io/safepyrun/core.html#poswritepolicy)),
-checking the `Path` object itself
-([`PathWritePolicy`](https://AnswerDotAI.github.io/safepyrun/core.html#pathwritepolicy)),
-and checking `open()` calls only when the mode is writable
-([`OpenWritePolicy`](https://AnswerDotAI.github.io/safepyrun/core.html#openwritepolicy)).
-You can also subclass
-[`WritePolicy`](https://AnswerDotAI.github.io/safepyrun/core.html#writepolicy)
-to create custom checks.
+(`PosWritePolicy`), checking the `Path` object itself
+(`PathWritePolicy`), and checking `open()` calls only when the mode is
+writable (`OpenWritePolicy`). You can also subclass `WritePolicy` to
+create custom checks.
 
-The simplest,
-[`PosWritePolicy`](https://AnswerDotAI.github.io/safepyrun/core.html#poswritepolicy),
-checks a specific positional or keyword argument against the allowed
-destinations. Here, position 1 (or keyword `dst`) is validated — writing
-to `/tmp` is allowed, but `/root` is blocked:
+The simplest, `PosWritePolicy`, checks a specific positional or keyword
+argument against the allowed destinations. Here, position 1 (or keyword
+`dst`) is validated — writing to `/tmp` is allowed, but `/root` is
+blocked:
 
 ``` python
-pp = PosWritePolicy(1, 'dst')
-pp.check(None, ['src', '/tmp/ok'], {}, ['/tmp'])
-try: pp.check(None, ['src', '/root/bad'], {}, ['/tmp'])
-except PermissionError: print("PosWritePolicy correctly blocked /root/bad")
+pp = PosAllowPolicy(1, 'dst')
+pp(None, ['src', '/tmp/ok'], {}, ['/tmp'])
+try: pp(None, ['src', '/root/bad'], {}, ['/tmp'])
+except PermissionError: print("PosAllowPolicy correctly blocked /root/bad")
 ```
 
-    PosWritePolicy correctly blocked /root/bad
+    PosAllowPolicy correctly blocked /root/bad
 
-You can create custom write policies by subclassing
-[`WritePolicy`](https://AnswerDotAI.github.io/safepyrun/core.html#writepolicy)
-and implementing the `check` method. For example, here we show a policy
-that only allows writes to files with specific extensions — useful if
-you want the LLM to create `.csv` or `.json` files but not arbitrary
+You can create custom write policies by subclassing `WritePolicy` and
+implementing the `check` method. For example, here we show a policy that
+only allows writes to files with specific extensions — useful if you
+want the LLM to create `.csv` or `.json` files but not arbitrary
 scripts.
 
-The `check` signature receives `(obj, args, kwargs, ok_dests)` where
+The `__call__` signature receives `(obj, args, kwargs, ok_dests)` where
 `obj` is the object the method is called on (e.g. a `Path` instance),
 `args`/`kwargs` are the method’s arguments, and `ok_dests` is the list
-of permitted directory prefixes. Calling
-[`chk_dest`](https://AnswerDotAI.github.io/safepyrun/core.html#chk_dest)
-first handles the directory check, then the custom logic adds the
-extension constraint on top.
+of permitted directory prefixes. Calling `chk_dest` first handles the
+directory check, then the custom logic adds the extension constraint on
+top.
 
 ``` python
-class ExtWritePolicy(WritePolicy):
+class ExtWritePolicy(AllowPolicy):
     "Only allow writes to paths with specified extensions"
     def __init__(self, exts): self.exts = set(exts)
-    def check(self, obj, args, kwargs, ok_dests):
+    def __call__(self, obj, args, kwargs, ok_dests):
         chk_dest(obj, ok_dests)
         if Path(str(obj)).suffix not in self.exts: raise PermissionError(f"{Path(str(obj)).suffix!r} not allowed")
 ```
 
 ``` python
 ep = ExtWritePolicy(['.csv', '.json'])
-ep.check(Path('/tmp/data.csv'), [], {}, ['/tmp'])
-try: ep.check(Path('/tmp/script.sh'), [], {}, ['/tmp'])
+ep(Path('/tmp/data.csv'), [], {}, ['/tmp'])
+try: ep(Path('/tmp/script.sh'), [], {}, ['/tmp'])
 except PermissionError: print("ExtWritePolicy correctly blocked .sh")
 ```
 
     ExtWritePolicy correctly blocked .sh
 
-You can register it with
-[`allow_write`](https://AnswerDotAI.github.io/safepyrun/core.html#allow_write)
-just like the built-in policies. The key is the `ClassName.method`
-string the sandbox will intercept:
+You can register it with `allow` just like the built-in policies:
 
 ``` python
-allow_write({'Path.write_text': ExtWritePolicy(['.csv', '.json', '.txt'])})
+allow({Path: [('write_text', ExtWritePolicy(['.csv', '.json', '.txt']))]})
 ```
 
 ## Configuration
@@ -499,14 +480,9 @@ allow_write({'Path.write_text': ExtWritePolicy(['.csv', '.json', '.txt'])})
 defaults are registered. This lets you permanently extend the sandbox
 allowlists without modifying the package. The config file is executed
 with all `safepyrun.core` globals already available, so no imports are
-needed. This includes
-[`allow`](https://AnswerDotAI.github.io/safepyrun/core.html#allow),
-[`allow_write`](https://AnswerDotAI.github.io/safepyrun/core.html#allow_write),
-[`WritePolicy`](https://AnswerDotAI.github.io/safepyrun/core.html#writepolicy),
-[`PathWritePolicy`](https://AnswerDotAI.github.io/safepyrun/core.html#pathwritepolicy),
-[`PosWritePolicy`](https://AnswerDotAI.github.io/safepyrun/core.html#poswritepolicy),
-[`OpenWritePolicy`](https://AnswerDotAI.github.io/safepyrun/core.html#openwritepolicy),
-and all standard library modules already imported by the module.
+needed. This includes `allow`, `allow_write`, `WritePolicy`,
+`PathWritePolicy`, `PosWritePolicy`, `OpenWritePolicy`, and all standard
+library modules already imported by the module.
 
 Example `~/.config/safepyrun/config.py` (Linux) or
 `~/Library/Application Support/safepyrun/config.py` (macOS):
