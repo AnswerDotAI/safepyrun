@@ -2,7 +2,7 @@
 
 # %% auto #0
 __all__ = ['all_builtins', 'ALLOWED_DUNDERS', 'default_ok_dests', 'find_var', 'allow_write_types', 'sdir', 'SafeTransformer',
-           'RunPython', 'create_pyrun_magic', 'allow_matplotlib', 'load_ipython_extension']
+           'should_export', 'RunPython', 'create_pyrun_magic', 'allow_matplotlib', 'load_ipython_extension']
 
 # %% ../nbs/00_core.ipynb #468aa264
 from fastcore.utils import *
@@ -85,7 +85,7 @@ class _WriteGuard:
 def _default_write_(obj):
     "Guard for in-place mutation; allows only registered types, blocks setting attrs to callables"
     if isinstance(obj, tuple(__pytools_write_types__)): return _WriteGuard(obj)
-    raise PermissionError(f"Write to {type(obj).__name__} not allowed in sandbox")
+    raise PermissionError(f"Write to {type(obj).__name__} not allowed in sandbox; use `allow()` to add it") from None
 
 # %% ../nbs/00_core.ipynb #703cdc90
 class _AllowChecked:
@@ -111,7 +111,7 @@ all_builtins = safe_builtins | utility_builtins | limited_builtins | async_built
     dict=dict, list=list, set=set, tuple=tuple, frozenset=frozenset,
     __import__=__import__,
     iter=iter, next=next, hasattr=hasattr,
-    help=help, dir=sdir, sum=sum
+    help=help, dir=sdir, sum=sum, any=any, all=all
 )
 
 # %% ../nbs/00_core.ipynb #ac94dd1c
@@ -141,6 +141,23 @@ def _get_write_policy(obj, name):
             if p is not None: return p
     return None
 
+# %% ../nbs/00_core.ipynb #e391a4af
+class _ReadOnlyCallable:
+    def __init__(self, obj, name=None):
+        functools.update_wrapper(self, obj)
+        object.__setattr__(self, '_obj', obj)
+        object.__setattr__(self, '_name', name)
+
+    def __getattr__(self, name): return getattr(object.__getattribute__(self, '_obj'), name)
+    def __repr__(self): return repr(object.__getattribute__(self, '_obj'))
+    def __str__(self): return str(object.__getattribute__(self, '_obj'))
+    def __dir__(self): return dir(object.__getattribute__(self, '_obj'))
+    def __call__(self, *args, **kwargs):
+        n = object.__getattribute__(self, '_name')
+        if n: raise PermissionError(f"Calling `{n}` is not permitted; use `allow()` to add it") from None
+        raise PermissionError(f"Calling {type(object.__getattribute__(self, '_obj')).__name__} not allowed in sandbox")
+
+
 # %% ../nbs/00_core.ipynb #c28a2c09
 def _make_safe_getattr(ok_dests=None):
     def _safe_getattr(obj, name):
@@ -154,7 +171,7 @@ def _make_safe_getattr(ok_dests=None):
                 keys += [f"{cls.__module__}.{cls.__qualname__}.{name}" for cls in type(obj).__mro__ if hasattr(cls, '__module__')]
                 obj_name = getattr(obj, '__name__', None)
                 if obj_name: keys.append(f"{obj_name}.{name}")
-                if not any(k in __llmtools__ for k in keys): raise AttributeError(f"Cannot access callable: {name}")
+                if not any(k in __llmtools__ for k in keys): return _ReadOnlyCallable(val)
         return val
     return _safe_getattr
 
@@ -165,22 +182,15 @@ class _DirectPrint:
     def __call__(self, *a, **kw): print(*a, **kw)
 
 # %% ../nbs/00_core.ipynb #6eeed34a
-class _Uncallable:
-    def __init__(self, o, name):
-        functools.update_wrapper(self, o)
-        self._o,self._name = o,name
-    def __call__(self, *a, **kw): raise PermissionError(f"Calling `{self._name}` is not permitted")
-    def __getattr__(self, name): return getattr(self._o, name)
-    def __repr__(self): return repr(self._o)
-
 def _callable_ok(k, v):
-    if v in __pytools__: return True
+    try: is_tool = v in __pytools__
+    except TypeError: is_tool = False
+    if is_tool: return True
     if any(c in __pytools__ for c in type(v).__mro__): return True
     mod = sys.modules.get(getattr(v, '__module__', None))
     if mod and _cls_ok(mod, getattr(v, '__qualname__', k)): return True
     if k in __llmtools__: return True
     return False
-
 
 # %% ../nbs/00_core.ipynb #3e4ede6c
 ALLOWED_DUNDERS = {'__name__', '__module__', '__doc__', '__qualname__', '__file__'}
@@ -218,10 +228,17 @@ _inplace_ops = {
 def _inplacevar_(op, x, y): return _inplace_ops[op](x, y)
 def _safe_type(o:object): return type(o)
 
+# %% ../nbs/00_core.ipynb #6667a180
+def should_export(k, v, g):
+    "True if sandbox local `k` with value `v` should be exported back to caller globals `g`"
+    if k.startswith('_'): return False
+    if k.endswith('_'): return True
+    return not (k in g and (callable(v) or isinstance(v, types.ModuleType)))
+
 # %% ../nbs/00_core.ipynb #55cc6157
 async def _run_python(code:str, g=None, ok_dests=None):
     _rp_globals.set(g)
-    tools = {k:(v if not callable(v) or _callable_ok(k,v) else _Uncallable(v,k))
+    tools = {k:(v if not callable(v) or _callable_ok(k,v) else _ReadOnlyCallable(v,k))
         for k,v in g.items() if not k.startswith('_')}
     def unpack(a,*args): return list(a)
     builtins = dict(all_builtins)
@@ -242,7 +259,7 @@ async def _run_python(code:str, g=None, ok_dests=None):
             comp = compile_restricted(src, '<tool>', 'exec' if is_exec else 'eval', policy=SafeTransformer)
             r = eval(comp, rg, loc)
             return (await r) if inspect.isawaitable(r) else r
-        except NameError as e: raise NameError(f'`{e.name}` is has not been added to this sandbox yet') from None
+        except NameError as e: raise NameError(f'`{e.name}` is has not been added to this sandbox yet; use `allow()` to add it') from None
         except SyntaxError as e:
             if isinstance(e.msg, tuple): raise SyntaxError('\n'.join(e.msg)) from None
             raise
@@ -254,7 +271,7 @@ async def _run_python(code:str, g=None, ok_dests=None):
         if tree.body: await run(ast.unparse(ast.Module(tree.body, [])))
         res = await run(ast.unparse(ast.Expression(last.value)), False)
     else: await run(code)
-    g.update({k:v for k,v in loc.items() if not k.startswith('_') and (k not in g or k.endswith('_'))})
+    g.update(filter_dict(loc, lambda k,v: should_export(k, v, g)))
     return res
 
 # %% ../nbs/00_core.ipynb #5d38a1d0
@@ -287,12 +304,17 @@ class RunPython:
             Multiline code blocks can be used, including defining functions and variables, for use within the call.
             In addition most builtins are available, plus these symbols: {tools}{meths_s}
 
-            **NB**: If `code` creates symbols that end with `_`, they will be exported by to the calling namespace.
-            - This is how you can use symbols that either human or AI can use again later.
+            **NB**: Locals are exported back to the caller's namespace unless they'd shadow an existing callable or module.
+            - Symbols ending with `_` are always exported, even if they shadow existing names.
             Examples: `len([1,2,3])` (builtin); `add_msg(content="hi")` (tool); `df.shape` (non-callable attr);
             `[x**2 for x in range(5)]` (last expression returned); `sorted(my_dict.items())` (builtin + non-callable attr)"""
 
-    async def __call__(self, code:str): return await _run_python(code, g=self.g, ok_dests=self.ok_dests)
+    async def __call__(self, code:str):
+        try: return await _run_python(code, g=self.g, ok_dests=self.ok_dests)
+        except Exception as e:
+            tb = e.__traceback__
+            while tb.tb_next: tb = tb.tb_next
+            raise e.with_traceback(tb) from None
 
 # %% ../nbs/00_core.ipynb #9105f690
 def create_pyrun_magic(shell=None, pyrun=None):
