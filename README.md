@@ -88,10 +88,11 @@ library that has been audited once so every user doesn’t have to repeat
 the work: things like `re`, `json`, `itertools`, `math`, `collections`,
 `pathlib` (read-only methods), and many more. Second, user-extended
 functions registered via `allow()`, so you can opt in your own project’s
-functions and methods. Symbols the LLM creates with a trailing
-underscore (like `result_`) are exported back to the caller’s namespace
-for reuse, but must still be explicitly registered with `allow()` to be
-callable in subsequent sandbox calls.
+functions and methods. Symbols the LLM creates are exported back to the
+caller’s namespace by default, unless they would shadow an existing
+callable or module. Names ending with `_` (like `result_`) are always
+exported, even if they shadow. Exported callables must still be
+registered with `allow()` to be callable in subsequent sandbox calls.
 
 ## Usage
 
@@ -250,13 +251,14 @@ allow('my_func', {np.linalg: ['norm', 'det']})
 
 ### The `_` suffix export convention
 
-Any symbol the LLM creates whose name ends with `_` (but doesn’t start
-with `_`) is automatically exported back to the caller’s namespace. This
-is useful for building up data across multi-step tool loops. Note that
-exported callables are **not** automatically available to call in
-subsequent sandbox runs — they must still be registered with `allow()`
-to be callable. Non-callable exports (variables, data structures) are
-available immediately:
+All symbols created in the sandbox are exported back to the caller’s
+namespace by default — unless the name already exists and the new value
+is callable or a module (to prevent accidental shadowing). Names ending
+with `_` (but not starting with `_`) are always exported regardless,
+even if they shadow. Note that exported callables are **not**
+automatically available to call in subsequent sandbox runs — they must
+still be registered with `allow()` to be callable. Non-callable exports
+(variables, data structures) are available immediately:
 
 ``` python
 await pyrun('result_ = [x**2 for x in range(5)]')
@@ -278,8 +280,9 @@ counts_
     {'a': 1, 'b': 2}
 
 This is particularly useful in LLM tool loops where the model might need
-to accumulate results across steps. Non-suffixed names remain local to
-the sandbox call and are not exported.
+to accumulate results across steps. The `_` suffix is only needed when
+you want to force-export a name that would otherwise be blocked (because
+it shadows an existing callable or module).
 
 ### Async support
 
