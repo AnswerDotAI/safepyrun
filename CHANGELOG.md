@@ -2,6 +2,14 @@
 
 <!-- do not remove -->
 
+## 0.0.22
+
+### New Features
+
+- Add `_ReadOnlyCallable`, add `should_export` logic, improve error messages with allow() hints, and add `any`/`all` builtins ([#25](https://github.com/AnswerDotAI/safepyrun/issues/25))
+- allow all of `json` ([#24](https://github.com/AnswerDotAI/safepyrun/issues/24))
+
+
 ## 0.0.21
 
 ### New Features
