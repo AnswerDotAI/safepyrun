@@ -9,8 +9,8 @@ from fastcore.utils import *
 from fastcore.xtras import asdict
 from fastcore.xdg import xdg_config_home
 from fastcore.docments import MarkdownRenderer
-from pyskills import *
-from pyskills import __pytools__
+from pyskills.core import *
+from pyskills.core import __pytools__
 
 from inspect import currentframe,Parameter,signature
 from contextvars import ContextVar
