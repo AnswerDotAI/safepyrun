@@ -16,8 +16,7 @@ def main(path: Param("Path to script, or '-' for stdin", str, opt=False, nargs='
     "Run a python script file in the safepyrun sandbox"
     try:
         code = sys.stdin.read() if path == '-' else Path(path).read_text()
-        result = asyncio.run(RunPython()(code))
-        if result is not None: print(result)
+        if (r := asyncio.run(RunPython()(code))) is not None: print(r)
         return 0
     except Exception as e:
         print(f"Error: {e}", file=sys.stderr)
