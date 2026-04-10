@@ -259,7 +259,6 @@ async def _run_python(code:str, g=None, ok_dests=None):
             comp = compile_restricted(src, '<tool>', 'exec' if is_exec else 'eval', policy=SafeTransformer)
             r = eval(comp, rg, loc)
             return (await r) if inspect.isawaitable(r) else r
-        except NameError as e: raise NameError(f'`{e.name}` is has not been added to this sandbox yet; use `allow()` to add it') from None
         except SyntaxError as e:
             if isinstance(e.msg, tuple): raise SyntaxError('\n'.join(e.msg)) from None
             raise
