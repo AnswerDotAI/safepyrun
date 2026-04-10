@@ -12,7 +12,7 @@ import asyncio, sys
 
 # %% ../nbs/01_cli.ipynb #e9eea171
 @call_parse
-def main(path: Param("Path to script, or '-' for stdin", str, nargs='?', default='-')):
+def main(path: Param("Path to script, or '-' for stdin", str, opt=False, nargs='?', default='-')):
     "Run a python script file in the safepyrun sandbox"
     try:
         code = sys.stdin.read() if path == '-' else Path(path).read_text()
