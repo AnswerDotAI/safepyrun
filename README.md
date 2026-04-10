@@ -304,10 +304,12 @@ await asyncio.gather(fetch(1), fetch(2), fetch(3))
 
 ## Writable path permissions
 
-By default, `RunPython` blocks all filesystem writes. To enable
-controlled writing, pass `ok_dests` — a list of directory prefixes where
-writes are permitted. Writing to an allowed destination works normally,
-but writing anywhere else raises `PermissionError`:
+By default,
+[`RunPython`](https://AnswerDotAI.github.io/safepyrun/core.html#runpython)
+blocks all filesystem writes. To enable controlled writing, pass
+`ok_dests` — a list of directory prefixes where writes are permitted.
+Writing to an allowed destination works normally, but writing anywhere
+else raises `PermissionError`:
 
 ``` python
 pyrun2 = RunPython(ok_dests=['/tmp'])
@@ -371,8 +373,10 @@ except PermissionError as e: print(f'Blocked: {e}')
 
     Blocked: Dest '/root/bad.txt' not allowed; permitted: ['/tmp']
 
-Without `ok_dests`, the default `RunPython` instance blocks all write
-operations entirely — `Path.write_text` isn’t even callable:
+Without `ok_dests`, the default
+[`RunPython`](https://AnswerDotAI.github.io/safepyrun/core.html#runpython)
+instance blocks all write operations entirely — `Path.write_text` isn’t
+even callable:
 
 ``` python
 try: await pyrun("Path('/tmp/test.txt').write_text('nope')")
@@ -502,3 +506,19 @@ allow_write({'DataFrame.to_csv': PosWritePolicy(0, 'path_or_buf')})
 
 If the config file has errors, a warning is emitted and the defaults
 remain intact.
+
+## CLI
+
+safepyrun ships with a command-line tool that runs a Python script file
+in the sandbox. You can pass a file path, or pipe code in via stdin:
+
+``` sh
+# Run a script file
+$ safepyrun myscript.py
+
+# Pipe code via stdin
+$ echo "1+1" | safepyrun
+```
+
+The result of the last expression is printed to stdout, matching the
+behaviour of `pyrun` in Python. Errors are reported to stderr.

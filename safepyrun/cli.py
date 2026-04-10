@@ -4,7 +4,7 @@
 __all__ = ['main']
 
 # %% ../nbs/01_cli.ipynb #8d265033
-from fastcore.script import call_parse
+from fastcore.script import call_parse, Param
 from pathlib import Path
 from .core import RunPython
 
@@ -12,7 +12,7 @@ import asyncio, sys
 
 # %% ../nbs/01_cli.ipynb #e9eea171
 @call_parse
-def main(path: str='-'):
+def main(path: Param("Path to script, or '-' for stdin", str, nargs='?', default='-')):
     "Run a python script file in the safepyrun sandbox"
     try:
         code = sys.stdin.read() if path == '-' else Path(path).read_text()
