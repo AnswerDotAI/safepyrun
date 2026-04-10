@@ -8,11 +8,17 @@ from fastcore.script import call_parse
 from pathlib import Path
 from .core import RunPython
 
-import asyncio
+import asyncio, sys
 
-# %% ../nbs/01_cli.ipynb #9d8e45dd
+# %% ../nbs/01_cli.ipynb #e9eea171
 @call_parse
-def main(path: str):
+def main(path: str='-'):
     "Run a python script file in the safepyrun sandbox"
-    pyrun = RunPython()
-    asyncio.run(pyrun(Path(path).read_text()))
+    try:
+        code = sys.stdin.read() if path == '-' else Path(path).read_text()
+        result = asyncio.run(RunPython()(code))
+        if result is not None: print(result)
+        return 0
+    except Exception as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return 1
