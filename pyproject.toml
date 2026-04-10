@@ -34,6 +34,9 @@ Documentation = "https://AnswerDotAI.github.io/safepyrun/"
 [project.entry-points.nbdev]
 safepyrun = "safepyrun._modidx:d"
 
+[project.scripts]
+safepyrun = "safepyrun.cli:main"
+
 [tool.setuptools.dynamic]
 version = {attr = "safepyrun.__version__"}
 
