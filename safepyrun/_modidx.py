@@ -52,4 +52,5 @@ d = { 'settings': { 'branch': 'main',
                                 'safepyrun.core.find_var': ('core.html#find_var', 'safepyrun/core.py'),
                                 'safepyrun.core.load_ipython_extension': ('core.html#load_ipython_extension', 'safepyrun/core.py'),
                                 'safepyrun.core.sdir': ('core.html#sdir', 'safepyrun/core.py'),
-                                'safepyrun.core.should_export': ('core.html#should_export', 'safepyrun/core.py')}}}
+                                'safepyrun.core.should_export': ('core.html#should_export', 'safepyrun/core.py'),
+                                'safepyrun.core.srcfn': ('core.html#srcfn', 'safepyrun/core.py')}}}

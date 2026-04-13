@@ -183,13 +183,14 @@ class _DirectPrint:
 
 # %% ../nbs/00_core.ipynb #6eeed34a
 def _callable_ok(k, v):
-    try: is_tool = v in __pytools__
-    except TypeError: is_tool = False
-    if is_tool: return True
+    try:
+        if v in __pytools__: return True
+    except TypeError: pass
+    if k in __llmtools__: return True
     if any(c in __pytools__ for c in type(v).__mro__): return True
     mod = sys.modules.get(getattr(v, '__module__', None))
     if mod and _cls_ok(mod, getattr(v, '__qualname__', k)): return True
-    if k in __llmtools__: return True
+    if (s:=getattr(v, '__self__', None)) and _cls_ok(s, getattr(v, '__func__', v).__name__): return True
     return False
 
 # %% ../nbs/00_core.ipynb #3e4ede6c
