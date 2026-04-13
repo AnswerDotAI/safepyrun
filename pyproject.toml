@@ -40,5 +40,8 @@ version = {attr = "safepyrun.__version__"}
 [tool.setuptools.packages.find]
 include = ["safepyrun"]
 
+[project.scripts]
+safepyrun = "safepyrun.core:cli"
+
 [tool.nbdev]
 allowed_metadata_keys = ['solveit_dialog_mode', 'solveit_ver']

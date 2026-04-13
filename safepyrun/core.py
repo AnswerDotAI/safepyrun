@@ -2,7 +2,8 @@
 
 # %% auto #0
 __all__ = ['all_builtins', 'ALLOWED_DUNDERS', 'default_ok_dests', 'find_var', 'allow_write_types', 'sdir', 'SafeTransformer',
-           'should_export', 'srcfn', 'RunPython', 'create_pyrun_magic', 'allow_matplotlib', 'load_ipython_extension']
+           'should_export', 'srcfn', 'RunPython', 'create_pyrun_magic', 'allow_matplotlib', 'load_ipython_extension',
+           'cli']
 
 # %% ../nbs/00_core.ipynb #468aa264
 from fastcore.utils import *
@@ -428,3 +429,15 @@ def load_ipython_extension(ip):
     ns['pyrun'] = pyrun = RunPython(g=ns)
     ns['allow'] = allow
     create_pyrun_magic(ip, pyrun)
+
+# %% ../nbs/00_core.ipynb #30964442
+from fastcore.script import call_parse, Param
+
+# %% ../nbs/00_core.ipynb #74c49b7c
+@call_parse
+def cli(path: Param("Path to script, or '-' for stdin", str, opt=False, nargs='?', default='-')):
+    "Run a python script file in the safepyrun sandbox"
+    try:
+        code = sys.stdin.read() if path == '-' else Path(path).read_text()
+        if (r := asyncio.run(RunPython()(code))) is not None: print(r)
+    except Exception as e: return not print(f"Error: {e}", file=sys.stderr)
