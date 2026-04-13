@@ -2,7 +2,7 @@
 
 # %% auto #0
 __all__ = ['all_builtins', 'ALLOWED_DUNDERS', 'default_ok_dests', 'find_var', 'allow_write_types', 'sdir', 'SafeTransformer',
-           'should_export', 'RunPython', 'create_pyrun_magic', 'allow_matplotlib', 'load_ipython_extension']
+           'should_export', 'srcfn', 'RunPython', 'create_pyrun_magic', 'allow_matplotlib', 'load_ipython_extension']
 
 # %% ../nbs/00_core.ipynb #468aa264
 from fastcore.utils import *
@@ -235,6 +235,14 @@ def should_export(k, v, g):
     if k.endswith('_'): return True
     return not (k in g and (callable(v) or isinstance(v, types.ModuleType)))
 
+# %% ../nbs/00_core.ipynb #12b831de
+def srcfn(src):
+    "Stores src in linecache under <pyrun_{i%10}>, returns the name." 
+    linecache.cache[fn] = (len(src), None,  src.splitlines(keepends=True), fn:=f'<pyrun_{srcfn.i}>')
+    srcfn.i = (srcfn.i + 1)%10
+    return fn
+srcfn.i=0
+
 # %% ../nbs/00_core.ipynb #55cc6157
 async def _run_python(code:str, g=None, ok_dests=None):
     _rp_globals.set(g)
@@ -248,7 +256,7 @@ async def _run_python(code:str, g=None, ok_dests=None):
     rg = dict(__builtins__=builtins, _getattr_=_make_safe_getattr(ok_dests),
         _inplacevar_ = _inplacevar_, type = _safe_type,
         _getitem_=lambda o,k: o[k], _getiter_=iter, _apply_ = lambda f, *a, **kw: f(*a, **kw),
-        _write_=_default_write_, __metaclass__=type, __name__='<tool>',
+        _write_=_default_write_, __metaclass__=type, __name__='<pyrun>',
         _print_=_DirectPrint, _print=_DirectPrint(),
         _unpack_sequence_=unpack, _iter_unpack_sequence_=unpack,
         enumerate=enumerate, sorted=sorted, reversed=reversed, max=max, min=min, **tools)
@@ -256,7 +264,7 @@ async def _run_python(code:str, g=None, ok_dests=None):
     loc = {}
     async def run(src, is_exec=True):
         try:
-            comp = compile_restricted(src, '<tool>', 'exec' if is_exec else 'eval', policy=SafeTransformer)
+            comp = compile_restricted(src, srcfn(src), 'exec' if is_exec else 'eval', policy=SafeTransformer)
             r = eval(comp, rg, loc)
             return (await r) if inspect.isawaitable(r) else r
         except SyntaxError as e:
@@ -312,7 +320,7 @@ class RunPython:
         try: return await _run_python(code, g=self.g, ok_dests=self.ok_dests)
         except Exception as e:
             tb = e.__traceback__
-            while tb.tb_next: tb = tb.tb_next
+            while tb.tb_next and not tb.tb_frame.f_code.co_filename.startswith('<pyrun'): tb = tb.tb_next
             raise e.with_traceback(tb) from None
 
 # %% ../nbs/00_core.ipynb #9105f690
