@@ -149,6 +149,8 @@ class _ReadOnlyCallable:
         object.__setattr__(self, '_obj', obj)
         object.__setattr__(self, '_name', name)
 
+    @property
+    def __class__(self): return object.__getattribute__(self, '_obj').__class__
     def __getattr__(self, name): return getattr(object.__getattribute__(self, '_obj'), name)
     def __repr__(self): return repr(object.__getattribute__(self, '_obj'))
     def __str__(self): return str(object.__getattribute__(self, '_obj'))
@@ -228,7 +230,16 @@ _inplace_ops = {
 }
 
 def _inplacevar_(op, x, y): return _inplace_ops[op](x, y)
-def _safe_type(o:object): return type(o)
+
+# %% ../nbs/00_core.ipynb #dff06376
+_real_type = type
+
+class _SafeTypeMeta(_real_type):
+    def __instancecheck__(cls, inst): return _real_type.__instancecheck__(_real_type, inst)
+    def __subclasscheck__(cls, sub): return _real_type.__subclasscheck__(_real_type, sub)
+
+class _safe_type(metaclass=_SafeTypeMeta):
+    def __new__(cls, o): return _real_type(o)
 
 # %% ../nbs/00_core.ipynb #6667a180
 def should_export(k, v, g):
