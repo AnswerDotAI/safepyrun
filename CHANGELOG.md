@@ -2,6 +2,13 @@
 
 <!-- do not remove -->
 
+## 0.0.25
+
+### New Features
+
+- Add `_SafeTypeMeta` and `_safe_type` class with proper isinstance support, and expose `__class__` on `_ReadOnlyCallable` ([#31](https://github.com/AnswerDotAI/safepyrun/issues/31))
+
+
 ## 0.0.24
 
 ### New Features
