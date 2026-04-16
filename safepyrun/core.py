@@ -317,7 +317,8 @@ class RunPython:
         meths = '; '.join(f"`{_cls_name(c)}`: {', '.join(sorted(str(_meth_name(m)) for m in ms if _meth_name(m) is not ...))}" if ... not in ms
                           else f"`{_cls_name(c)}`: *" for c,ms in sorted(__pytools__.items(), key=lambda x: _cls_name(x[0])) if ms)
         meths_s = f'\n\n            Allowed methods by type: {meths}' if meths else ''
-        return f"""Execute restricted Python with access to LLM tools, returning last expression.
+        return f"""Execute restricted Python with access to LLM tools, returning last expression. 
+            Runs under asyncio event loop, so `await x` works. 
             `import` works in the usual way. All non-callable globals and non-callable attrs are usable.
             Callable globals are usable only if explicitly registered as tools.
             Callable object attrs are only accessible if `ClassName.method` is registered as a tool.
