@@ -105,12 +105,18 @@ def _safe_open(ok_dests):
         return open(*args, **kwargs)
     return _open
 
+# %% ../nbs/00_core.ipynb #c33872f6
+def _safe_import(name, rg=None, rl=None, fromlist=(), level=0):
+    mod = __import__(name, rg, rl, fromlist, level)
+    if fromlist: return SimpleNamespace(**{n:rg['_getattr_'](mod, n) for n in fromlist})
+    return mod
+
 # %% ../nbs/00_core.ipynb #fee6c11b
 def sdir(o): return [a for a in dir(o) if not a.startswith('_')]
 
 all_builtins = safe_builtins | utility_builtins | limited_builtins | async_builtins | dict(
     dict=dict, list=list, set=set, tuple=tuple, frozenset=frozenset,
-    __import__=__import__,
+    __import__=_safe_import,
     iter=iter, next=next, hasattr=hasattr,
     help=help, dir=sdir, sum=sum, any=any, all=all
 )
