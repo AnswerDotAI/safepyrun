@@ -219,6 +219,7 @@ class SafeTransformer(RestrictingNodeTransformer):
             node.value = new_value
             return node
         else: raise NotImplementedError(f"Unknown ctx type: {type(node.ctx)}")
+    def visit_AnnAssign(self, node): return self.node_contents_visit(node)
 
 # %% ../nbs/00_core.ipynb #e8365db0
 _inplace_ops = {
