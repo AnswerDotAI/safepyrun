@@ -2,6 +2,19 @@
 
 <!-- do not remove -->
 
+## 0.0.26
+
+### New Features
+
+- allow annotation assignment ([#35](https://github.com/AnswerDotAI/safepyrun/pull/35)), thanks to [@ncoop57](https://github.com/ncoop57)
+- Add CLI entry point for safepyrun ([#27](https://github.com/AnswerDotAI/safepyrun/pull/27)), thanks to [@ncoop57](https://github.com/ncoop57)
+- Show source code for line causing an exception. ([#28](https://github.com/AnswerDotAI/safepyrun/pull/28)), thanks to [@PiotrCzapla](https://github.com/PiotrCzapla)
+
+### Bugs Squashed
+
+- Fix imports to use explicit module path ([#26](https://github.com/AnswerDotAI/safepyrun/pull/26)), thanks to [@ncoop57](https://github.com/ncoop57)
+
+
 ## 0.0.25
 
 ### New Features
