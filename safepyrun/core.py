@@ -2,7 +2,8 @@
 
 # %% auto #0
 __all__ = ['all_builtins', 'ALLOWED_DUNDERS', 'default_ok_dests', 'find_var', 'allow_write_types', 'sdir', 'SafeTransformer',
-           'should_export', 'RunPython', 'create_pyrun_magic', 'allow_matplotlib', 'load_ipython_extension']
+           'should_export', 'srcfn', 'RunPython', 'create_pyrun_magic', 'allow_matplotlib', 'load_ipython_extension',
+           'cli']
 
 # %% ../nbs/00_core.ipynb #468aa264
 from fastcore.utils import *
@@ -148,6 +149,8 @@ class _ReadOnlyCallable:
         object.__setattr__(self, '_obj', obj)
         object.__setattr__(self, '_name', name)
 
+    @property
+    def __class__(self): return object.__getattribute__(self, '_obj').__class__
     def __getattr__(self, name): return getattr(object.__getattribute__(self, '_obj'), name)
     def __repr__(self): return repr(object.__getattribute__(self, '_obj'))
     def __str__(self): return str(object.__getattribute__(self, '_obj'))
@@ -183,13 +186,14 @@ class _DirectPrint:
 
 # %% ../nbs/00_core.ipynb #6eeed34a
 def _callable_ok(k, v):
-    try: is_tool = v in __pytools__
-    except TypeError: is_tool = False
-    if is_tool: return True
+    try:
+        if v in __pytools__: return True
+    except TypeError: pass
+    if k in __llmtools__: return True
     if any(c in __pytools__ for c in type(v).__mro__): return True
     mod = sys.modules.get(getattr(v, '__module__', None))
     if mod and _cls_ok(mod, getattr(v, '__qualname__', k)): return True
-    if k in __llmtools__: return True
+    if (s:=getattr(v, '__self__', None)) and _cls_ok(s, getattr(v, '__func__', v).__name__): return True
     return False
 
 # %% ../nbs/00_core.ipynb #3e4ede6c
@@ -215,6 +219,7 @@ class SafeTransformer(RestrictingNodeTransformer):
             node.value = new_value
             return node
         else: raise NotImplementedError(f"Unknown ctx type: {type(node.ctx)}")
+    def visit_AnnAssign(self, node): return self.node_contents_visit(node)
 
 # %% ../nbs/00_core.ipynb #e8365db0
 _inplace_ops = {
@@ -226,7 +231,16 @@ _inplace_ops = {
 }
 
 def _inplacevar_(op, x, y): return _inplace_ops[op](x, y)
-def _safe_type(o:object): return type(o)
+
+# %% ../nbs/00_core.ipynb #dff06376
+_real_type = type
+
+class _SafeTypeMeta(_real_type):
+    def __instancecheck__(cls, inst): return _real_type.__instancecheck__(_real_type, inst)
+    def __subclasscheck__(cls, sub): return _real_type.__subclasscheck__(_real_type, sub)
+
+class _safe_type(metaclass=_SafeTypeMeta):
+    def __new__(cls, o): return _real_type(o)
 
 # %% ../nbs/00_core.ipynb #6667a180
 def should_export(k, v, g):
@@ -234,6 +248,14 @@ def should_export(k, v, g):
     if k.startswith('_'): return False
     if k.endswith('_'): return True
     return not (k in g and (callable(v) or isinstance(v, types.ModuleType)))
+
+# %% ../nbs/00_core.ipynb #12b831de
+def srcfn(src):
+    "Stores src in linecache under <pyrun_{i%10}>, returns the name." 
+    linecache.cache[fn] = (len(src), None,  src.splitlines(keepends=True), fn:=f'<pyrun_{srcfn.i}>')
+    srcfn.i = (srcfn.i + 1)%10
+    return fn
+srcfn.i=0
 
 # %% ../nbs/00_core.ipynb #55cc6157
 async def _run_python(code:str, g=None, ok_dests=None):
@@ -248,7 +270,7 @@ async def _run_python(code:str, g=None, ok_dests=None):
     rg = dict(__builtins__=builtins, _getattr_=_make_safe_getattr(ok_dests),
         _inplacevar_ = _inplacevar_, type = _safe_type,
         _getitem_=lambda o,k: o[k], _getiter_=iter, _apply_ = lambda f, *a, **kw: f(*a, **kw),
-        _write_=_default_write_, __metaclass__=type, __name__='<tool>',
+        _write_=_default_write_, __metaclass__=type, __name__='<pyrun>',
         _print_=_DirectPrint, _print=_DirectPrint(),
         _unpack_sequence_=unpack, _iter_unpack_sequence_=unpack,
         enumerate=enumerate, sorted=sorted, reversed=reversed, max=max, min=min, **tools)
@@ -256,10 +278,9 @@ async def _run_python(code:str, g=None, ok_dests=None):
     loc = {}
     async def run(src, is_exec=True):
         try:
-            comp = compile_restricted(src, '<tool>', 'exec' if is_exec else 'eval', policy=SafeTransformer)
+            comp = compile_restricted(src, srcfn(src), 'exec' if is_exec else 'eval', policy=SafeTransformer)
             r = eval(comp, rg, loc)
             return (await r) if inspect.isawaitable(r) else r
-        except NameError as e: raise NameError(f'`{e.name}` is has not been added to this sandbox yet; use `allow()` to add it') from None
         except SyntaxError as e:
             if isinstance(e.msg, tuple): raise SyntaxError('\n'.join(e.msg)) from None
             raise
@@ -297,7 +318,8 @@ class RunPython:
         meths = '; '.join(f"`{_cls_name(c)}`: {', '.join(sorted(str(_meth_name(m)) for m in ms if _meth_name(m) is not ...))}" if ... not in ms
                           else f"`{_cls_name(c)}`: *" for c,ms in sorted(__pytools__.items(), key=lambda x: _cls_name(x[0])) if ms)
         meths_s = f'\n\n            Allowed methods by type: {meths}' if meths else ''
-        return f"""Execute restricted Python with access to LLM tools, returning last expression.
+        return f"""Execute restricted Python with access to LLM tools, returning last expression. 
+            Runs under asyncio event loop, so `await x` works. 
             `import` works in the usual way. All non-callable globals and non-callable attrs are usable.
             Callable globals are usable only if explicitly registered as tools.
             Callable object attrs are only accessible if `ClassName.method` is registered as a tool.
@@ -313,7 +335,7 @@ class RunPython:
         try: return await _run_python(code, g=self.g, ok_dests=self.ok_dests)
         except Exception as e:
             tb = e.__traceback__
-            while tb.tb_next: tb = tb.tb_next
+            while tb.tb_next and not tb.tb_frame.f_code.co_filename.startswith('<pyrun'): tb = tb.tb_next
             raise e.with_traceback(tb) from None
 
 # %% ../nbs/00_core.ipynb #9105f690
@@ -420,3 +442,15 @@ def load_ipython_extension(ip):
     ns['pyrun'] = pyrun = RunPython(g=ns)
     ns['allow'] = allow
     create_pyrun_magic(ip, pyrun)
+
+# %% ../nbs/00_core.ipynb #30964442
+from fastcore.script import call_parse, Param
+
+# %% ../nbs/00_core.ipynb #74c49b7c
+@call_parse
+def cli(path: Param("Path to script, or '-' for stdin", str, opt=False, nargs='?', default='-')):
+    "Run a python script file in the safepyrun sandbox"
+    try:
+        code = sys.stdin.read() if path == '-' else Path(path).read_text()
+        if (r := asyncio.run(RunPython()(code))) is not None: print(r)
+    except Exception as e: return not print(f"Error: {e}", file=sys.stderr)

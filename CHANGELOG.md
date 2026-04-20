@@ -2,6 +2,25 @@
 
 <!-- do not remove -->
 
+## 0.0.25
+
+### New Features
+
+- Add `_SafeTypeMeta` and `_safe_type` class with proper isinstance support, and expose `__class__` on `_ReadOnlyCallable` ([#31](https://github.com/AnswerDotAI/safepyrun/issues/31))
+
+
+## 0.0.24
+
+### New Features
+
+- Add CLI ([#30](https://github.com/AnswerDotAI/safepyrun/issues/30))
+- Add bound method support to `_callable_ok` ([#29](https://github.com/AnswerDotAI/safepyrun/issues/29))
+
+### Bugs Squashed
+
+- Show source code for line causing an exception. ([#28](https://github.com/AnswerDotAI/safepyrun/pull/28)), thanks to [@PiotrCzapla](https://github.com/PiotrCzapla)
+
+
 ## 0.0.23
 
 ### New Features
