@@ -138,7 +138,8 @@ warnings.warn('a warning')
 ''')
 ```
 
-    <tool>:2: UserWarning: a warning
+    <pyrun_3>:2: UserWarning: a warning
+      warnings.warn('a warning')
 
     'ok'
 
@@ -222,7 +223,7 @@ allow(np.array, np.ndarray.sum)
 await pyrun('np.array([1,2,3]).sum()')
 ```
 
-    6
+    np.int64(6)
 
 Note that the string must use the actual class or module name as it
 appears in Python, not the alias. In the example above, even though the
@@ -238,7 +239,7 @@ allow({np.ndarray: ['mean', 'reshape', 'tolist']})
 await pyrun('np.array([1,2,3,4]).reshape(2,2).mean()')
 ```
 
-    2.5
+    np.float64(2.5)
 
 The dict form does two things: it registers the class/module name itself
 (so it can be called as a constructor or accessed as a namespace), and
@@ -305,11 +306,10 @@ await asyncio.gather(fetch(1), fetch(2), fetch(3))
 ## Writable path permissions
 
 By default,
-[`RunPython`](https://AnswerDotAI.github.io/safepyrun/core.html#runpython)
-blocks all filesystem writes. To enable controlled writing, pass
-`ok_dests` — a list of directory prefixes where writes are permitted.
-Writing to an allowed destination works normally, but writing anywhere
-else raises `PermissionError`:
+[`RunPython()`](https://AnswerDotAI.github.io/safepyrun/core.html#runpython)
+allows writes to the current working directory (`.`) and `/tmp`, and
+blocks writes elsewhere. You can pass `ok_dests` to restrict writes to a
+different set of directory prefixes:
 
 ``` python
 pyrun2 = RunPython(ok_dests=['/tmp'])
@@ -330,7 +330,7 @@ try: await pyrun2("Path('/etc/evil.txt').write_text('bad')")
 except PermissionError as e: print(f'Blocked: {e}')
 ```
 
-    Blocked: Dest '/etc/evil.txt' not allowed; permitted: ['/tmp']
+    Blocked: Dest '/etc/evil.txt' not allowed; permitted: ('/tmp',)
 
 The same permission checking applies to `open()` in write mode, not just
 `Path` methods:
@@ -346,7 +346,7 @@ try: await pyrun2("open('/root/bad.txt', 'w')")
 except PermissionError as e: print(f'Blocked: {e}')
 ```
 
-    Blocked: Dest '/root/bad.txt' not allowed; permitted: ['/tmp']
+    Blocked: Dest '/root/bad.txt' not allowed; permitted: ('/tmp',)
 
 Read access is unaffected — only writes are gated:
 
@@ -371,17 +371,32 @@ try: await pyrun2("import shutil; shutil.copy('/tmp/test_write.txt', '/root/bad.
 except PermissionError as e: print(f'Blocked: {e}')
 ```
 
-    Blocked: Dest '/root/bad.txt' not allowed; permitted: ['/tmp']
+    Blocked: Dest '/root/bad.txt' not allowed; permitted: ('/tmp',)
 
-Without `ok_dests`, the default
-[`RunPython`](https://AnswerDotAI.github.io/safepyrun/core.html#runpython)
-instance blocks all write operations entirely — `Path.write_text` isn’t
-even callable:
+By default,
+[`RunPython()`](https://AnswerDotAI.github.io/safepyrun/core.html#runpython)
+uses `default_ok_dests`, which allows writes in `.` and `/tmp` but
+blocks writes elsewhere.
 
 ``` python
-try: await pyrun("Path('/tmp/test.txt').write_text('nope')")
-except AttributeError as e: print(f'No ok_dests: {e}')
+await pyrun("Path('test_default_ok.txt').write_text('ok')")
+await pyrun("Path('/tmp/test_default_tmp.txt').write_text('tmp')")
+
+try: await pyrun("Path('/etc/nope.txt').write_text('bad')")
+except PermissionError as e: print(f'Default blocked: {e}')
 ```
+
+    Default blocked: Dest '/etc/nope.txt' not allowed; permitted: ('.', '/tmp')
+
+If you want to disable write protection entirely, pass `ok_dests=None`:
+
+``` python
+pyrun_unrestricted = RunPython(ok_dests=None)
+unrestricted_path = Path.home()/'safepyrun-unrestricted.txt'
+await pyrun_unrestricted(f"Path({str(unrestricted_path)!r}).write_text('ok')")
+```
+
+    2
 
 You can use `'.'` to allow writes relative to the current working
 directory. Path traversal attempts (`../`, `subdir/../../`) are detected
@@ -424,12 +439,12 @@ except PermissionError: print("Blocked ../ as expected")
 When `ok_dests` is set, safepyrun uses write policies to determine how
 to validate each callable’s destination arguments. Three built-in policy
 classes cover common patterns: checking a positional or keyword argument
-(`PosWritePolicy`), checking the `Path` object itself
+(`PosAllowPolicy`), checking the `Path` object itself
 (`PathWritePolicy`), and checking `open()` calls only when the mode is
-writable (`OpenWritePolicy`). You can also subclass `WritePolicy` to
+writable (`OpenWritePolicy`). You can also subclass `AllowPolicy` to
 create custom checks.
 
-The simplest, `PosWritePolicy`, checks a specific positional or keyword
+The simplest, `PosAllowPolicy`, checks a specific positional or keyword
 argument against the allowed destinations. Here, position 1 (or keyword
 `dst`) is validated — writing to `/tmp` is allowed, but `/root` is
 blocked:
@@ -443,11 +458,10 @@ except PermissionError: print("PosAllowPolicy correctly blocked /root/bad")
 
     PosAllowPolicy correctly blocked /root/bad
 
-You can create custom write policies by subclassing `WritePolicy` and
-implementing the `check` method. For example, here we show a policy that
-only allows writes to files with specific extensions — useful if you
-want the LLM to create `.csv` or `.json` files but not arbitrary
-scripts.
+You can create custom write policies by subclassing `AllowPolicy` and
+implementing `__call__`. For example, here we show a policy that only
+allows writes to files with specific extensions — useful if you want the
+LLM to create `.csv` or `.json` files but not arbitrary scripts.
 
 The `__call__` signature receives `(obj, args, kwargs, ok_dests)` where
 `obj` is the object the method is called on (e.g. a `Path` instance),
@@ -487,9 +501,10 @@ allow({Path: [('write_text', ExtWritePolicy(['.csv', '.json', '.txt']))]})
 defaults are registered. This lets you permanently extend the sandbox
 allowlists without modifying the package. The config file is executed
 with all `safepyrun.core` globals already available, so no imports are
-needed. This includes `allow`, `allow_write`, `WritePolicy`,
-`PathWritePolicy`, `PosWritePolicy`, `OpenWritePolicy`, and all standard
-library modules already imported by the module.
+needed. This includes `allow`,
+[`allow_write_types`](https://AnswerDotAI.github.io/safepyrun/core.html#allow_write_types),
+`AllowPolicy`, `PathWritePolicy`, `PosAllowPolicy`, `OpenWritePolicy`,
+and all standard library modules already imported by the module.
 
 Example `~/.config/safepyrun/config.py` (Linux) or
 `~/Library/Application Support/safepyrun/config.py` (macOS):
@@ -501,7 +516,7 @@ import pandas
 allow({pandas.DataFrame: ['head', 'describe', 'info', 'shape']})
 
 # Allow pandas to write CSV to ~/data
-allow_write({'DataFrame.to_csv': PosWritePolicy(0, 'path_or_buf')})
+allow({pandas.DataFrame: [('to_csv', PosAllowPolicy(0, 'path_or_buf'))]})
 ```
 
 If the config file has errors, a warning is emitted and the defaults
