@@ -368,7 +368,8 @@ allow({
     StringIO: ..., BytesIO: ..., dict: ..., list: ..., set: ..., json: ...,
     Path: ['expanduser', 'read_text', 'glob', 'iterdir', 'exists', 'read_bytes', 'is_file', 'is_dir', 'stat', 'resolve',
         'with_suffix', 'with_name', 'relative_to', 'match', 'joinpath'],
-    asyncio: ['gather','sleep'], httpx: ['get', 'options'],
+    asyncio: ['gather','sleep'],
+    httpx: ['get', 'options'], httpx.Response: ...,
     },
     urlencode, quote, unquote, display, HTML, Markdown, Image, Pretty, SVG, doc
 )
