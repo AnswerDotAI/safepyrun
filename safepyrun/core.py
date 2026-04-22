@@ -296,12 +296,13 @@ async def _run_python(code:str, g=None, ok_dests=None):
     return res
 
 # %% ../nbs/00_core.ipynb #5d38a1d0
-default_ok_dests = None
+default_ok_dests = ('.', '/tmp')
 
 # %% ../nbs/00_core.ipynb #5447b52c
 class RunPython:
     def __init__(self, g=None, sentinel=None, ok_dests=UNSET):
         if ok_dests is UNSET: ok_dests = default_ok_dests
+        elif ok_dests is not None: ok_dests = tuple(listify(ok_dests))
         self.g = _find_frame_dict(sentinel) if g is None else g
         self.ok_dests = ok_dests
 
