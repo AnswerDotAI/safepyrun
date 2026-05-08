@@ -16,7 +16,7 @@ from inspect import currentframe,Parameter,signature
 from contextvars import ContextVar
 from types import MappingProxyType
 
-import linecache,builtins,inspect,types,subprocess
+import linecache,builtins,inspect,types,subprocess,ast
 
 # %% ../nbs/01_audit.ipynb #16c25d79
 # ContextVar fallback for when stack walking fails (e.g. inside asyncio.gather)
