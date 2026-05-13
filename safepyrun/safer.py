@@ -222,8 +222,8 @@ srcfn.i=0
 # %% ../nbs/02_safer.ipynb #b6724773
 def _safe_import(name, globals=None, locals=None, fromlist=(), level=0):
     if name not in sys.modules: raise PermissionError(f"{name} not preloaded")
-    if not fromlist: return __import__(name, globals=globals, locals=locals, level=level)
-    return SimpleNamespace(**{n:rg['_getattr_'](mod, n) for n in fromlist})
+    mod = __import__(name, globals=globals, locals=locals, fromlist=fromlist, level=level)
+    return mod if not fromlist else SimpleNamespace(**{n: globals['_getattr_'](mod, n) for n in fromlist})
 
 _builtins = dict(builtins.__dict__) | dict(__import__ = _safe_import)
 
