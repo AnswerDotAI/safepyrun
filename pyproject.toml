@@ -18,6 +18,7 @@ classifiers = [
 dependencies = [
   "restrictedpython-async",
   "restrictedpython",
+  "fastaudit",
   "pyskills>=0.0.3",
   "fastcore>=1.12.27",
   "httpx",
