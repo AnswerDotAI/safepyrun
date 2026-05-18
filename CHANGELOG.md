@@ -2,6 +2,37 @@
 
 <!-- do not remove -->
 
+## 0.0.27
+
+### New Features
+
+- Make audit hook system the default backend ([#42](https://github.com/AnswerDotAI/safepyrun/issues/42))
+
+- Replace RestrictedPython in audit.py with fastaudit-based hooks, configurable mon_disable_policy, and split legacy RestrictedPython implementation into new safer.py module ([#41](https://github.com/AnswerDotAI/safepyrun/issues/41))
+
+- Add experiment `.audit` implementation ([#39](https://github.com/AnswerDotAI/safepyrun/issues/39))
+
+- Add `httpx.Response` ([#36](https://github.com/AnswerDotAI/safepyrun/issues/36))
+
+### Bugs Squashed
+
+- Misc fixes ([#40](https://github.com/AnswerDotAI/safepyrun/pull/40)), thanks to [@kafkasl](https://github.com/kafkasl)
+  - Fixes an issue in  `_safe_import`
+1. `rg` was undefined (it should be globals) 
+2. the `mod` in `globals['_getattr_'](mod, n)` was not available either
+
+Originally the PR changed the empty default dests to `default_ok_dests = ('.', '/tmp')` but considering the new `safepyrun.audit` which is designed to not get in the way too much, I think it's fine keeping audit more restricted by default with `default_ok_dests = ()`.
+
+- Fix from x import y ([#34](https://github.com/AnswerDotAI/safepyrun/pull/34)), thanks to [@PiotrCzapla](https://github.com/PiotrCzapla)
+  - This would work previously:
+```python
+%%py
+from os import system
+system("ls") # no permmision error here
+```
+PR fixes the issue so both `import os` and `from os import system` works alike.
+
+
 ## 0.0.26
 
 ### New Features
