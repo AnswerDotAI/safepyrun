@@ -125,7 +125,7 @@ async def _run_python(code:str, g=None, ok_dests=None):
     with mk_audit(ok_dests, before_deny=before_deny, data=data, on_call=on_call)():
         return await __run_python(code=code, g=g, ok_dests=ok_dests)
 
-# %% ../nbs/00_core.ipynb #f7162625
+# %% ../nbs/00_core.ipynb #7dad9339
 _builtins = dict(builtins.__dict__)
 
 async def __run_python(code:str, g=None, ok_dests=None):
@@ -141,7 +141,9 @@ async def __run_python(code:str, g=None, ok_dests=None):
     res = None
     if tree.body and isinstance(tree.body[-1], ast.Expr):
         last = tree.body.pop()
-        if tree.body: await run(ast.unparse(ast.Module(tree.body, [])))
+        if tree.body:
+            await run(ast.unparse(ast.Module(tree.body, [])))
+            rg.update(loc) # generators resolve inner vars from globals, so we need to make sure they are in `loc`
         res = await run(ast.unparse(ast.Expression(last.value)), False)
     else: await run(code)
     g.update(loc)
