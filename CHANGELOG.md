@@ -2,6 +2,14 @@
 
 <!-- do not remove -->
 
+## 0.1.2
+
+### Bugs Squashed
+
+- fix ns bug in init of RunPython ([#47](https://github.com/AnswerDotAI/safepyrun/pull/47)), thanks to [@vacmar01](https://github.com/vacmar01)
+- fixed generators issue ([#45](https://github.com/AnswerDotAI/safepyrun/pull/45)), thanks to [@kafkasl](https://github.com/kafkasl)
+
+
 ## 0.1.1
 
 ### New Features
