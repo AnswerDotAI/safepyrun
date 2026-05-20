@@ -161,11 +161,11 @@ class RunPython:
 
     def __init__(self, g=None, sentinel=None, ok_dests=UNSET):
         if ok_dests is UNSET: ok_dests = default_ok_dests
-        if not g:
+        if g is None:
             try: ip = get_ipython()
             except NameError: ip = None
             g = getattr(ip, 'user_ns', None)
-        if not g: g = _find_frame_dict(sentinel)
+        if g is None: g = _find_frame_dict(sentinel)
         self.g = g
         self.ok_dests = ok_dests or ()
 
