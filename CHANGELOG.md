@@ -2,6 +2,13 @@
 
 <!-- do not remove -->
 
+## 0.1.1
+
+### New Features
+
+- Allow rpds ([#44](https://github.com/AnswerDotAI/safepyrun/issues/44))
+
+
 ## 0.1.0
 
 ### Breaking Changes
