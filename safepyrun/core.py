@@ -48,7 +48,7 @@ from fastaudit import *
 
 # %% ../nbs/00_core.ipynb #de1fbbd5
 mon_disable_policy = dict(callees=set(), callers=set(), pairs=set(), preds=(),
-    callee_prefixes=('numpy.','rpds.'), callee_suffixes=('.dumps','.loads'),
+    callee_prefixes=(), callee_suffixes=('.dumps','.loads'),
     caller_prefixes=(), caller_suffixes=())
 
 def freeze_mon_policy(p):
