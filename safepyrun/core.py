@@ -9,6 +9,7 @@ __all__ = ['mon_disable_policy', 'mon', 'default_ok_dests', 'find_var', 'freeze_
 
 # %% ../nbs/00_core.ipynb #468aa264
 from fastcore.utils import *
+from fastcore.meta import delegates
 from fastcore.xtras import asdict
 from fastcore.xdg import xdg_config_home
 from fastcore.docments import MarkdownRenderer
@@ -119,14 +120,6 @@ def srcfn(src):
     return fn
 srcfn.i=0
 
-# %% ../nbs/00_core.ipynb #b1de0b53
-async def _run_python(code:str, g=None, ok_dests=None):
-    _rp_globals.set(g)
-    data = dict(pytools=MappingProxyType({k:frozenset(v) for k,v in __pytools__.items()}),
-        ok_dests=ok_dests or (), mon_policy=freeze_mon_policy(mon_disable_policy))
-    with mk_audit(ok_dests, before_deny=before_deny, data=data, on_call=on_call)():
-        return await __run_python(code=code, g=g, ok_dests=ok_dests)
-
 # %% ../nbs/00_core.ipynb #7dad9339
 _builtins = dict(builtins.__dict__)
 
@@ -151,8 +144,31 @@ async def __run_python(code:str, g=None, ok_dests=None):
     g.update(loc)
     return res
 
+# %% ../nbs/00_core.ipynb #eb4dd8c6
+async def _run_python(code:str, g=None, ok_dests=None):
+    _rp_globals.set(g)
+    data = dict(pytools=MappingProxyType({k:frozenset(v) for k,v in __pytools__.items()}),
+        ok_dests=ok_dests or (), mon_policy=freeze_mon_policy(mon_disable_policy))
+    with mk_audit(ok_dests, before_deny=before_deny, data=data, on_call=on_call)():
+        return await __run_python(code=code, g=g, ok_dests=ok_dests)
+
 # %% ../nbs/00_core.ipynb #5d38a1d0
 default_ok_dests = ()
+
+# %% ../nbs/00_core.ipynb #91b321ca
+def _check_user_code(tree, ban_imports, ban_defs):
+    "Reject user code that imports banned modules, defines names, mentions importlib, or calls exec/eval/compile"
+    for n in ast.walk(tree):
+        if ban_defs and isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            raise PermissionError(f"def/class not allowed: {n.name}")
+        if isinstance(n, ast.Import):
+            for a in n.names:
+                if a.name in ban_imports: raise PermissionError(f"import {a.name!r} not allowed")
+        elif isinstance(n, ast.ImportFrom):
+            if n.module and n.module in ban_imports: raise PermissionError(f"from {n.module!r} import not allowed")
+        elif isinstance(n, ast.Call) and isinstance(n.func, ast.Name) and n.func.id in {'exec','eval','compile'}:
+            raise PermissionError(f"{n.func.id}() not allowed")
+        elif isinstance(n, ast.Name) and n.id=='importlib': raise PermissionError("importlib not allowed")
 
 # %% ../nbs/00_core.ipynb #5447b52c
 class RunPython:
@@ -161,7 +177,7 @@ class RunPython:
     Multiline code blocks can be used, including defining functions and variables.
     **NB**: Locals are exported back to the caller's namespace."""
 
-    def __init__(self, g=None, sentinel=None, ok_dests=UNSET):
+    def __init__(self, g=None, sentinel=None, ok_dests=UNSET, ban_imports=frozenset({'socket','importlib'}), ban_defs=True):
         if ok_dests is UNSET: ok_dests = default_ok_dests
         if g is None:
             try: ip = get_ipython()
@@ -170,19 +186,23 @@ class RunPython:
         if g is None: g = _find_frame_dict(sentinel)
         self.g = g
         self.ok_dests = ok_dests or ()
+        self.ban_imports,self.ban_defs = ban_imports,ban_defs
 
     async def __call__(self, code:str):
-        try: return await _run_python(code, g=self.g, ok_dests=self.ok_dests)
+        try:
+            _check_user_code(ast.parse(code), ban_imports=self.ban_imports, ban_defs=self.ban_defs)
+            return await _run_python(code, g=self.g, ok_dests=self.ok_dests)
         except Exception as e:
             tb = e.__traceback__
             while tb.tb_next and not tb.tb_frame.f_code.co_filename.startswith('<pyrun'): tb = tb.tb_next
             raise e.with_traceback(tb) from None
 
 # %% ../nbs/00_core.ipynb #9105f690
-def create_pyrun_magic(shell=None, pyrun=None):
+@delegates(RunPython)
+def create_pyrun_magic(shell=None, pyrun=None, **kwargs):
     "Create magic"
     if not shell: shell = get_ipython()
-    if not pyrun: pyrun = RunPython()
+    if not pyrun: pyrun = RunPython(**kwargs)
     def f(line, cell=None):
         if line=='-o': return pyrun
         if not cell: return
