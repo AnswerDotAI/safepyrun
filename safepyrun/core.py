@@ -86,18 +86,19 @@ def frame_args(fr, obj=None):
     return args,kw
 
 # %% ../nbs/00_core.ipynb #ae19467f
-def before_deny(event, args, frame, msg, data,
+def before_deny(event, args, frame, msg, data, pre_deny=None,
     # Bind `frame_args` locally to protect from overwriting
     _frame_args=frame_args):
     "Check whether a possibly-denied audit event happened inside an approved call."
-    pytools,ok_dests = data['pytools'],data['ok_dests']
+    pytools = data['pytools']
+    if pre_deny and (pre := pre_deny(event, args, frame, msg, data, _frame_args)) is not None: return pre
 
     def _check(s, name, fr, obj=None):
         if ... in s or name in s: return True
         for x in s:
             if isinstance(x, tuple) and x[0] == name:
                 a,kw = _frame_args(fr, obj)
-                x[1](obj, a, kw, ok_dests)
+                x[1](obj, a, kw, data)
                 return True
         return False
 
@@ -145,11 +146,12 @@ async def __run_python(code:str, g=None, ok_dests=None):
     return res
 
 # %% ../nbs/00_core.ipynb #eb4dd8c6
-async def _run_python(code:str, g=None, ok_dests=None):
+async def _run_python(code:str, g=None, ok_dests=None, pre_deny=None, **kwargs):
     _rp_globals.set(g)
     data = dict(pytools=MappingProxyType({k:frozenset(v) for k,v in __pytools__.items()}),
-        ok_dests=ok_dests or (), mon_policy=freeze_mon_policy(mon_disable_policy))
-    with mk_audit(ok_dests, before_deny=before_deny, data=data, on_call=on_call)():
+        ok_dests=ok_dests or (), mon_policy=freeze_mon_policy(mon_disable_policy)) | kwargs
+    denyf = partial(before_deny, pre_deny=pre_deny)
+    with mk_audit(ok_dests, before_deny=denyf, data=data, on_call=on_call)():
         return await __run_python(code=code, g=g, ok_dests=ok_dests)
 
 # %% ../nbs/00_core.ipynb #5d38a1d0
@@ -171,13 +173,23 @@ def _check_user_code(tree, ban_imports, ban_defs):
         elif isinstance(n, ast.Name) and n.id=='importlib': raise PermissionError("importlib not allowed")
 
 # %% ../nbs/00_core.ipynb #5447b52c
+def _find_perm_err(e):
+    "Walk the exception chain looking for a PermissionError"
+    pe = e
+    while pe:
+        if isinstance(pe, PermissionError): return pe
+        pe = pe.__cause__ or pe.__context__
+    return e
+
+# %% ../nbs/00_core.ipynb #5f44108c
 class RunPython:
     """Execute Python with audit-hook safety checks and access to LLM tools, returning last expression.
     `import` works in the usual way. All builtins are available.
     Multiline code blocks can be used, including defining functions and variables.
     **NB**: Locals are exported back to the caller's namespace."""
 
-    def __init__(self, g=None, sentinel=None, ok_dests=UNSET, ban_imports=frozenset({'socket','importlib'}), ban_defs=True):
+    def __init__(self, g=None, sentinel=None, ok_dests=UNSET, ban_imports=frozenset({'socket','importlib'}), ban_defs=True,
+        pre_deny=None, **kwargs):
         if ok_dests is UNSET: ok_dests = default_ok_dests
         if g is None:
             try: ip = get_ipython()
@@ -186,13 +198,14 @@ class RunPython:
         if g is None: g = _find_frame_dict(sentinel)
         self.g = g
         self.ok_dests = ok_dests or ()
-        self.ban_imports,self.ban_defs = ban_imports,ban_defs
+        self.ban_imports,self.ban_defs,self.pre_deny,self.kwargs = ban_imports,ban_defs,pre_deny,kwargs
 
     async def __call__(self, code:str):
         try:
             _check_user_code(ast.parse(code), ban_imports=self.ban_imports, ban_defs=self.ban_defs)
-            return await _run_python(code, g=self.g, ok_dests=self.ok_dests)
+            return await _run_python(code, g=self.g, ok_dests=self.ok_dests, pre_deny=self.pre_deny, **self.kwargs)
         except Exception as e:
+            e = _find_perm_err(e)
             tb = e.__traceback__
             while tb.tb_next and not tb.tb_frame.f_code.co_filename.startswith('<pyrun'): tb = tb.tb_next
             raise e.with_traceback(tb) from None
