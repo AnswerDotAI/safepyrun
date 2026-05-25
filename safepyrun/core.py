@@ -4,8 +4,8 @@
 
 # %% auto #0
 __all__ = ['mon_disable_policy', 'mon', 'default_ok_dests', 'find_var', 'freeze_mon_policy', 'on_call', 'frame_args',
-           'before_deny', 'srcfn', 'RunPython', 'create_pyrun_magic', 'allow_matplotlib', 'load_ipython_extension',
-           'cli']
+           'RawDenyInfo', 'CallInfo', 'DenyInfo', 'before_deny', 'srcfn', 'RunPython', 'create_pyrun_magic',
+           'allow_matplotlib', 'load_ipython_extension', 'cli']
 
 # %% ../nbs/00_core.ipynb #468aa264
 from fastcore.utils import *
@@ -62,13 +62,13 @@ def freeze_mon_policy(p):
 
 # %% ../nbs/00_core.ipynb #2b3a8099
 mon = sys.monitoring
-def on_call(caller, callee, fn, code, off, data):
+def on_call(caller, callee, fn, code, off, data, calls):
     "Fast monitoring callback to decide if event should be DISABLEd"
     p = data['mon_policy']
     if callee in p['callees'] or caller in p['callers'] or (caller,callee) in p['pairs']: return mon.DISABLE
     if callee.startswith(p['callee_prefixes']) or callee.endswith(p['callee_suffixes']): return mon.DISABLE
     if caller.startswith(p['caller_prefixes']) or caller.endswith(p['caller_suffixes']): return mon.DISABLE
-    if any(o(caller, callee, fn, code, off) for o in p['preds']): return mon.DISABLE
+    if any(o(caller, callee, fn, code, off, calls) for o in p['preds']): return mon.DISABLE
 
 # %% ../nbs/00_core.ipynb #2af8b7f2
 def frame_args(fr, obj=None):
@@ -86,32 +86,74 @@ def frame_args(fr, obj=None):
     return args,kw
 
 # %% ../nbs/00_core.ipynb #ae19467f
-def before_deny(event, args, frame, msg, data, pre_deny=None,
-    # Bind `frame_args` locally to protect from overwriting
-    _frame_args=frame_args):
-    "Check whether a possibly-denied audit event happened inside an approved call."
+def _ctx_check(s, name, obj, a, kw, data):
+    "Check a pytool entry set for name, including validator tuples"
+    if ... in s or name in s: return True
+    for x in s:
+        if isinstance(x, tuple) and x[0] == name:
+            a = list(a[1:] if obj is not None and a and a[0] is obj else a)
+            x[1](obj, a, kw, data)
+            return True
+    return False
+
+def _call_allowed(c, data):
+    "Check one logical call against registered pytools"
     pytools = data['pytools']
-    if pre_deny and (pre := pre_deny(event, args, frame, msg, data, _frame_args)) is not None: return pre
+    mod = sys.modules.get(c.module)
+    qn,nm = c.qualname,getattr(c.fn, '__name__', None) or (c.qualname or '').rsplit('.', 1)[-1]
+    if not nm: return False
+    if mod in pytools and _ctx_check(pytools[mod], nm, None, c.args, c.kwargs, data): return True
+    if mod and '.' in qn:
+        cls = getattr(mod, qn.rsplit('.', 1)[0], None)
+        obj = c.args[0] if cls and c.args and isinstance(c.args[0], cls) else None
+        for o in [cls] + list(getattr(cls, '__mro__', ())):
+            if o in pytools and _ctx_check(pytools[o], nm, obj, c.args, c.kwargs, data): return True
+    return False
 
-    def _check(s, name, fr, obj=None):
-        if ... in s or name in s: return True
-        for x in s:
-            if isinstance(x, tuple) and x[0] == name:
-                a,kw = _frame_args(fr, obj)
-                x[1](obj, a, kw, data)
-                return True
-        return False
+def _ctx_allowed(info):
+    "Check all logical calls in deny info against registered pytools"
+    return any(_call_allowed(c, info.data) for c in info.calls)
 
-    fr = frame
-    while fr:
-        mod = sys.modules.get(fr.f_globals.get('__name__'))
-        qn,nm = fr.f_code.co_qualname,fr.f_code.co_name
-        if mod in pytools and _check(pytools[mod], nm, fr): return True
-        if mod and '.' in qn:
-            cls = getattr(mod, qn.rsplit('.', 1)[0], None)
-            for o in [cls] + list(getattr(cls, '__mro__', ())):
-                if o in pytools and _check(pytools[o], nm, fr, fr.f_locals.get('self')): return True
-        fr = fr.f_back
+# %% ../nbs/00_core.ipynb #53fe97bf
+class RawDenyInfo:
+    def __init__(self, args, frame, msg, calls, frame_args): store_attr()
+
+class CallInfo:
+    def __init__(self, fn=None, args=(), kwargs=None, module=None, qualname=None, name=None, frame=None, source=None):
+        kwargs = kwargs or {}
+        if name is None and module and qualname: name = f'{module}.{qualname}'
+        store_attr()
+
+class DenyInfo:
+    def __init__(self, event, args, frame, msg, data, calls, frame_args):
+        self.event,self.data = event,data
+        self.raw = RawDenyInfo(args, frame, msg, calls, frame_args)
+        self.tracked_calls = L(calls).map(self._tracked_call)
+        self.frame_calls = L(self._frame_calls())
+        self.calls = self.tracked_calls + self.frame_calls
+        self.call = first(self.calls, None)
+        self.args = self.call.args if self.call else ()
+        self.kwargs = self.call.kwargs if self.call else {}
+
+    def _tracked_call(self, c): return CallInfo(c.fn, c.args, c.kwargs, c.module, c.qualname, c.name, source='tracked')
+    def find(self, name): return first(o for o in self.calls if o.name == name or o.qualname == name)
+
+    def _frame_calls(self):
+        fr = self.raw.frame
+        while fr:
+            mod = sys.modules.get(fr.f_globals.get('__name__'))
+            qn = fr.f_code.co_qualname
+            try: a,kw = self.raw.frame_args(fr)
+            except Exception: a,kw = (),{}
+            yield CallInfo(args=a, kwargs=kw, module=getattr(mod, '__name__', None), qualname=qn, frame=fr, source='frame')
+            fr = fr.f_back
+
+# %% ../nbs/00_core.ipynb #d0468fcc
+def before_deny(event, args, frame, msg, data, calls, pre_deny=None, _frame_args=frame_args):
+    "Check whether a possibly-denied audit event happened inside an approved call."
+    info = DenyInfo(event, args, frame, msg, data, calls, _frame_args)
+    if pre_deny and (pre := pre_deny(info)) is not None: return pre
+    if _ctx_allowed(info): return True
 
 # %% ../nbs/00_core.ipynb #12b831de
 def srcfn(src):
