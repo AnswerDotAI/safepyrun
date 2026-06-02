@@ -2,6 +2,15 @@
 
 <!-- do not remove -->
 
+## 0.1.3
+
+### New Features
+
+- Refactor `before_deny` to use DenyInfo/CallInfo with tracked + frame calls ([#50](https://github.com/AnswerDotAI/safepyrun/issues/50))
+- Add `pre_deny` hook and custom data passthrough to RunPython; unwrap wrapped PermissionErrors ([#49](https://github.com/AnswerDotAI/safepyrun/issues/49))
+- Add AST-based user code checks to RunPython (ban imports, defs, exec/eval/compile, importlib) ([#48](https://github.com/AnswerDotAI/safepyrun/issues/48))
+
+
 ## 0.1.2
 
 ### Bugs Squashed
