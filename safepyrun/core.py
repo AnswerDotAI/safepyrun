@@ -166,10 +166,11 @@ srcfn.i=0
 # %% ../nbs/00_core.ipynb #7dad9339
 _builtins = dict(builtins.__dict__)
 
+_injected_names = ('__builtins__','__name__')
 async def __run_python(code:str, g=None, ok_dests=None):
     _rp_globals.set(g)
     rg = g | dict(__builtins__=_builtins, __name__='<pyrun>')
-    loc = {}
+    loc = rg
     async def run(src, is_exec=True):
         comp = compile(src, srcfn(src), 'exec' if is_exec else 'eval', flags=ast.PyCF_ALLOW_TOP_LEVEL_AWAIT)
         r = eval(comp, rg, loc)
@@ -179,12 +180,10 @@ async def __run_python(code:str, g=None, ok_dests=None):
     res = None
     if tree.body and isinstance(tree.body[-1], ast.Expr):
         last = tree.body.pop()
-        if tree.body:
-            await run(ast.unparse(ast.Module(tree.body, [])))
-            rg.update(loc) # generators resolve inner vars from globals, so we need to make sure they are in `loc`
+        if tree.body: await run(ast.unparse(ast.Module(tree.body, [])))
         res = await run(ast.unparse(ast.Expression(last.value)), False)
     else: await run(code)
-    g.update(loc)
+    g.update({k:v for k,v in loc.items() if k not in _injected_names})
     return res
 
 # %% ../nbs/00_core.ipynb #0f9e4c14
