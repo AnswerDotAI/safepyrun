@@ -200,6 +200,7 @@ async def _wait_bg(before):
                  if isinstance(r, BaseException) and not isinstance(r, asyncio.CancelledError)]
     if excs: raise first(excs, risinstance(PermissionError)) or excs[0]
 
+# %% ../nbs/00_core.ipynb #d79ccebc
 async def _run_python(code:str, g=None, ok_dests=None, pre_deny=None, **kwargs):
     _rp_globals.set(g)
     data = dict(pytools=MappingProxyType({k:frozenset(v) for k,v in __pytools__.items()}),
