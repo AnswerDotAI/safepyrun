@@ -191,13 +191,25 @@ async def __run_python(code:str, g=None, ok_dests=None):
 allow_imports = set()
 
 # %% ../nbs/00_core.ipynb #7ccc8d88
+async def _wait_bg(before):
+    "Wait for tasks created since `before`; surface their failures."
+    cur = asyncio.current_task()
+    excs = []
+    while ts := [t for t in asyncio.all_tasks()-before if t is not cur and not t.done()]:
+        excs += [r for r in await asyncio.gather(*ts, return_exceptions=True)
+                 if isinstance(r, BaseException) and not isinstance(r, asyncio.CancelledError)]
+    if excs: raise first(excs, risinstance(PermissionError)) or excs[0]
+
 async def _run_python(code:str, g=None, ok_dests=None, pre_deny=None, **kwargs):
     _rp_globals.set(g)
     data = dict(pytools=MappingProxyType({k:frozenset(v) for k,v in __pytools__.items()}),
         ok_dests=ok_dests or (), mon_policy=freeze_mon_policy(mon_disable_policy)) | kwargs
     denyf = partial(before_deny, pre_deny=pre_deny)
+    before = asyncio.all_tasks()
     with mk_audit(ok_dests, before_deny=denyf, data=data, allow_imports=frozenset(allow_imports), on_call=on_call)():
-        return await __run_python(code=code, g=g, ok_dests=ok_dests)
+        res = await __run_python(code=code, g=g, ok_dests=ok_dests)
+    await _wait_bg(before)
+    return res
 
 # %% ../nbs/00_core.ipynb #5d38a1d0
 default_ok_dests = ()
