@@ -302,6 +302,9 @@ if _cfg_py.exists():
         if 'default_ok_dests' in _cfg_ns: globals()['default_ok_dests'] = _cfg_ns['default_ok_dests']
     except Exception as e: warnings.warn(f"Failed to load {_cfg_py}: {e}")
 
+# %% ../nbs/00_core.ipynb #e88a1ff9
+allow(patch);
+
 # %% ../nbs/00_core.ipynb #92e10e61
 def allow_matplotlib():
     import matplotlib.pyplot as plt
