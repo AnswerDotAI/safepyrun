@@ -165,6 +165,7 @@ srcfn.i=0
 
 # %% ../nbs/00_core.ipynb #7dad9339
 _builtins = dict(builtins.__dict__)
+_noexport = {'pyrun', 'allow'}  # host-injected helpers must not be shadowed back into user globals
 
 async def __run_python(code:str, g=None, ok_dests=None):
     _rp_globals.set(g)
@@ -184,7 +185,7 @@ async def __run_python(code:str, g=None, ok_dests=None):
             rg.update(loc) # generators resolve inner vars from globals, so we need to make sure they are in `loc`
         res = await run(ast.unparse(ast.Expression(last.value)), False)
     else: await run(code)
-    g.update(loc)
+    g.update({k:v for k,v in loc.items() if k not in _noexport})
     return res
 
 # %% ../nbs/00_core.ipynb #0f9e4c14
@@ -200,16 +201,22 @@ async def _wait_bg(before):
                  if isinstance(r, BaseException) and not isinstance(r, asyncio.CancelledError)]
     if excs: raise first(excs, risinstance(PermissionError)) or excs[0]
 
-# %% ../nbs/00_core.ipynb #d79ccebc
-async def _run_python(code:str, g=None, ok_dests=None, pre_deny=None, **kwargs):
+def _live_policy():
+    "Frozen fingerprint of mutable host policy that AI code must not change mid-call."
+    return (frozenset((k, frozenset(v)) for k,v in __pytools__.items()),
+        frozenset(allow_imports), freeze_mon_policy(mon_disable_policy))
+
+# %% ../nbs/00_core.ipynb #a183eb50
+async def _run_python(code:str, g=None, ok_dests=(), pre_deny=None, **kwargs):
     _rp_globals.set(g)
     data = dict(pytools=MappingProxyType({k:frozenset(v) for k,v in __pytools__.items()}),
-        ok_dests=ok_dests or (), mon_policy=freeze_mon_policy(mon_disable_policy)) | kwargs
+        ok_dests=ok_dests, mon_policy=freeze_mon_policy(mon_disable_policy)) | kwargs
     denyf = partial(before_deny, pre_deny=pre_deny)
-    before = asyncio.all_tasks()
+    before,policy = asyncio.all_tasks(), _live_policy()
     with mk_audit(ok_dests, before_deny=denyf, data=data, allow_imports=frozenset(allow_imports), on_call=on_call)():
         res = await __run_python(code=code, g=g, ok_dests=ok_dests)
     await _wait_bg(before)
+    if _live_policy() != policy: raise PermissionError("sandbox policy changed during execution")
     return res
 
 # %% ../nbs/00_core.ipynb #5d38a1d0
@@ -246,8 +253,8 @@ class RunPython:
     Multiline code blocks can be used, including defining functions and variables.
     **NB**: Locals are exported back to the caller's namespace."""
 
-    def __init__(self, g=None, sentinel=None, ok_dests=UNSET, ban_imports=frozenset({'socket','importlib'}), ban_defs=True,
-        pre_deny=None, **kwargs):
+    def __init__(self, g=None, sentinel=None, ok_dests=UNSET, ban_imports=frozenset({'socket','importlib','safepyrun','fastaudit'}),
+        ban_defs=True, pre_deny=None, **kwargs):
         if ok_dests is UNSET: ok_dests = default_ok_dests
         if g is None:
             try: ip = get_ipython()
