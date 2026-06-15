@@ -5,7 +5,7 @@
 # %% auto #0
 __all__ = ['mon_disable_policy', 'mon', 'allow_imports', 'default_ok_dests', 'find_var', 'freeze_mon_policy', 'on_call',
            'frame_args', 'RawDenyInfo', 'CallInfo', 'DenyInfo', 'before_deny', 'srcfn', 'RunPython',
-           'create_pyrun_magic', 'allow_matplotlib', 'load_ipython_extension', 'cli']
+           'create_pyrun_magic', 'allow_matplotlib', 'allow_pandas', 'load_ipython_extension', 'cli']
 
 # %% ../nbs/00_core.ipynb #468aa264
 from fastcore.utils import *
@@ -85,34 +85,58 @@ def frame_args(fr, obj=None):
     if c.co_flags & inspect.CO_VARKEYWORDS: kw.update(fr.f_locals.get(c.co_varnames[i], {}))
     return args,kw
 
-# %% ../nbs/00_core.ipynb #ae19467f
-def _ctx_check(s, name, obj, a, kw, data):
-    "Check a pytool entry set for name, including validator tuples"
-    if ... in s or name in s: return True
-    for x in s:
-        if isinstance(x, tuple) and x[0] == name:
-            a = list(a[1:] if obj is not None and a and a[0] is obj else a)
-            x[1](obj, a, kw, data)
-            return True
-    return False
+# %% ../nbs/00_core.ipynb #511c9b15
+def _prefix_keys(name):
+    while name := name.rpartition('.')[0]: yield f'{name}.*'
 
+# %% ../nbs/00_core.ipynb #a2a1cb8e
+def _ctx_check(v, name, obj, a, kw, data):
+    if v is ...: return None
+    if isinstance(v, tuple): v = (v,)
+    if name in v: return True
+    aa = list(a[1:] if obj is not None and a and a[0] is obj else a)
+    for x in v:
+        if isinstance(x, tuple) and (x[0] is ... or x[0] == name):
+            x[1](obj, aa, kw, data)
+            return True
+    return None if ... in v else False
+
+# %% ../nbs/00_core.ipynb #396f7992
 def _call_allowed(c, data):
-    "Check one logical call against registered pytools"
     pytools = data['pytools']
     mod = sys.modules.get(c.module)
     qn,nm = c.qualname,getattr(c.fn, '__name__', None) or (c.qualname or '').rsplit('.', 1)[-1]
     if not nm: return False
-    if mod in pytools and _ctx_check(pytools[mod], nm, None, c.args, c.kwargs, data): return True
+    full = c.name or (f'{c.module}.{qn}' if c.module and qn else nm)
+    soft = False
+
+    if mod in pytools:
+        if (res := _ctx_check(pytools[mod], nm, None, c.args, c.kwargs, data)): return True
+        if res is None: soft = True
+
+    for k in _prefix_keys(full):
+        if k in pytools:
+            if (res := _ctx_check(pytools[k], nm, None, c.args, c.kwargs, data)): return True
+            if res is None: soft = True
+
     if mod and '.' in qn:
         cls = getattr(mod, qn.rsplit('.', 1)[0], None)
         obj = c.args[0] if cls and c.args and isinstance(c.args[0], cls) else None
-        for o in [cls] + list(getattr(cls, '__mro__', ())):
-            if o in pytools and _ctx_check(pytools[o], nm, obj, c.args, c.kwargs, data): return True
-    return False
+        typs = L(type(obj).__mro__ if obj is not None else ()) + L([cls]) + L(getattr(cls, '__mro__', ()))
+        for o in typs.unique():
+            if o in pytools:
+                if (res := _ctx_check(pytools[o], nm, obj, c.args, c.kwargs, data)): return True
+                if res is None: soft = True
+    return None if soft else False
 
+# %% ../nbs/00_core.ipynb #a58be55e
 def _ctx_allowed(info):
     "Check all logical calls in deny info against registered pytools"
-    return any(_call_allowed(c, info.data) for c in info.calls)
+    soft = False
+    for c in info.calls:
+        if (res := _call_allowed(c, info.data)): return True
+        if res is None: soft = True
+    return soft
 
 # %% ../nbs/00_core.ipynb #53fe97bf
 class RawDenyInfo:
@@ -309,28 +333,28 @@ allow(patch);
 def allow_matplotlib():
     import matplotlib.pyplot as plt
     from matplotlib.figure import Figure
-    from matplotlib.axes import Axes
-    from matplotlib.axis import Axis
-    from matplotlib.spines import Spine, SpinesProxy
-    from matplotlib.backend_bases import FigureCanvasBase
-    from matplotlib.font_manager import FontManager
-    from matplotlib.transforms import Bbox
 
-    allow(Bbox.update_from_path, FigureCanvasBase.__init__, FontManager.findfont)
-    allow({
-        plt: ['plot','figure','axis', 'subplots', 'show', 'tight_layout', 'subplot', 'bar', 'scatter', 'hist',
-            'xlabel', 'ylabel', 'title', 'legend', 'grid', 'xlim', 'ylim', 'colorbar', 'imshow'],
-        Figure: ['tight_layout', 'set_size_inches', 'add_subplot', 'suptitle'],
-        Axes: ['plot', 'bar', 'barh', 'scatter', 'hist', 'set_xlabel', 'set_ylabel', 'set_title',
-            'legend', 'grid', 'set_xlim', 'set_ylim', 'tick_params', 'set_xticks', 'set_yticks',
-            'annotate', 'text', 'axhline', 'axvline', 'fill_between', 'twinx', 'imshow', 'pie',
-            'boxplot', 'errorbar', 'stem', 'loglog', 'semilogx', 'semilogy', 'set_xscale', 'set_yscale'],
-        Axis: ['set_major_formatter', 'set_minor_formatter', 'set_major_locator', 'set_minor_locator'],
-        Spine: ['set_visible'], SpinesProxy: ['set_visible'],
-    })
-
+    allow({'matplotlib.*':...})
     _savefig_wp = PosAllowPolicy(0, 'fname')
     allow({Figure: [('savefig', _savefig_wp)], plt: [('savefig', _savefig_wp)]})
+
+
+# %% ../nbs/00_core.ipynb #9ed471fc
+def allow_pandas():
+    import pandas as pd
+
+    allow({'pandas.*': ...})
+
+    allow({pd.DataFrame: ['to_csv', 'to_json', 'to_hdf']}, allow_policy=PosAllowPolicy(0, 'path_or_buf'))
+    allow({pd.DataFrame: ['to_string', 'to_html', 'to_latex', 'to_markdown']}, allow_policy=PosAllowPolicy(0, 'buf'))
+    allow({pd.DataFrame: ['to_pickle', 'to_parquet', 'to_feather', 'to_orc', 'to_stata']}, allow_policy=PosAllowPolicy(0, 'path'))
+    allow({pd.DataFrame: ['to_xml']}, allow_policy=PosAllowPolicy(0, 'path_or_buffer'))
+    allow({pd.DataFrame: ['to_excel']}, allow_policy=PosAllowPolicy(0, 'excel_writer'))
+
+    allow({pd.Series: ['to_csv', 'to_json', 'to_hdf']}, allow_policy=PosAllowPolicy(0, 'path_or_buf'))
+    allow({pd.Series: ['to_string', 'to_latex', 'to_markdown']}, allow_policy=PosAllowPolicy(0, 'buf'))
+    allow({pd.Series: ['to_pickle']}, allow_policy=PosAllowPolicy(0, 'path'))
+    allow({pd.Series: ['to_excel']}, allow_policy=PosAllowPolicy(0, 'excel_writer'))
 
 # %% ../nbs/00_core.ipynb #8d1cb417
 def load_ipython_extension(ip):
