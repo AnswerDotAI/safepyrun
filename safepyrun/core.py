@@ -5,7 +5,7 @@
 # %% auto #0
 __all__ = ['mon_disable_policy', 'mon', 'allow_imports', 'default_ok_dests', 'find_var', 'freeze_mon_policy', 'on_call',
            'frame_args', 'RawDenyInfo', 'CallInfo', 'DenyInfo', 'before_deny', 'srcfn', 'RunPython',
-           'create_pyrun_magic', 'allow_matplotlib', 'allow_pandas', 'load_ipython_extension', 'cli']
+           'create_python_magic', 'allow_matplotlib', 'allow_pandas', 'load_ipython_extension', 'cli']
 
 # %% ../nbs/00_core.ipynb #468aa264
 from fastcore.utils import *
@@ -181,19 +181,19 @@ def before_deny(event, args, frame, msg, data, calls, pre_deny=None, _frame_args
 
 # %% ../nbs/00_core.ipynb #12b831de
 def srcfn(src):
-    "Stores src in linecache under <pyrun_{i%10}>, returns the name." 
-    linecache.cache[fn] = (len(src), None,  src.splitlines(keepends=True), fn:=f'<pyrun_{srcfn.i}>')
+    "Stores src in linecache under <python_{i%10}>, returns the name." 
+    linecache.cache[fn] = (len(src), None,  src.splitlines(keepends=True), fn:=f'<python_{srcfn.i}>')
     srcfn.i = (srcfn.i + 1)%10
     return fn
 srcfn.i=0
 
 # %% ../nbs/00_core.ipynb #7dad9339
 _builtins = dict(builtins.__dict__)
-_noexport = {'pyrun', 'allow'}  # host-injected helpers must not be shadowed back into user globals
+_noexport = {'python', 'allow'}  # host-injected helpers must not be shadowed back into user globals
 
 async def __run_python(code:str, g=None, ok_dests=None):
     _rp_globals.set(g)
-    rg = g | dict(__builtins__=_builtins, __name__='<pyrun>')
+    rg = g | dict(__builtins__=_builtins, __name__='<python>')
     loc = {}
     async def run(src, is_exec=True):
         comp = compile(src, srcfn(src), 'exec' if is_exec else 'eval', flags=ast.PyCF_ALLOW_TOP_LEVEL_AWAIT)
@@ -296,19 +296,19 @@ class RunPython:
         except Exception as e:
             e = _find_perm_err(e)
             tb = e.__traceback__
-            while tb.tb_next and not tb.tb_frame.f_code.co_filename.startswith('<pyrun'): tb = tb.tb_next
+            while tb.tb_next and not tb.tb_frame.f_code.co_filename.startswith('<python'): tb = tb.tb_next
             raise e.with_traceback(tb) from None
 
 # %% ../nbs/00_core.ipynb #9105f690
 @delegates(RunPython)
-def create_pyrun_magic(shell=None, pyrun=None, **kwargs):
+def create_python_magic(shell=None, python=None, **kwargs):
     "Create magic"
     if not shell: shell = get_ipython()
-    if not pyrun: pyrun = RunPython(**kwargs)
+    if not python: python = RunPython(**kwargs)
     def f(line, cell=None):
-        if line=='-o': return pyrun
+        if line=='-o': return python
         if not cell: return
-        return pyrun(cell)
+        return python(cell)
     shell.register_magic_function(f, 'line_cell', 'py')
 
 # %% ../nbs/00_core.ipynb #2324abe0
@@ -359,9 +359,9 @@ def allow_pandas():
 # %% ../nbs/00_core.ipynb #8d1cb417
 def load_ipython_extension(ip):
     ns = ip.user_ns
-    ns['pyrun'] = pyrun = RunPython(g=ns)
+    ns['python'] = python = RunPython(g=ns)
     ns['allow'] = allow
-    create_pyrun_magic(ip, pyrun)
+    create_python_magic(ip, python)
 
 # %% ../nbs/00_core.ipynb #30964442
 from fastcore.script import call_parse, Param

@@ -134,7 +134,7 @@
 
 ### Bugs Squashed
 
-- fix pyrun namespace to use kernel's `user_ns` ([#14](https://github.com/AnswerDotAI/safepyrun/pull/14)), thanks to [@KeremTurgutlu](https://github.com/KeremTurgutlu)
+- fix python namespace to use kernel's `user_ns` ([#14](https://github.com/AnswerDotAI/safepyrun/pull/14)), thanks to [@KeremTurgutlu](https://github.com/KeremTurgutlu)
 
 
 ## 0.0.14

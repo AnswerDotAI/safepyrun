@@ -101,18 +101,18 @@ from safepyrun import *
 from pyskills import *
 ```
 
-The main entry point is `pyrun = RunPython()`, which returns an async
+The main entry point is `python = RunPython()`, which returns an async
 function that takes a string of Python code and executes it in the
 sandbox. The last expression in the code is returned as the result, and
 any `print()` output is captured separately. Errors are caught and
 reported rather than crashing the caller.
 
 ``` python
-pyrun = RunPython()
+python = RunPython()
 ```
 
 ``` python
-await pyrun('1+1')
+await python('1+1')
 ```
 
     2
@@ -121,7 +121,7 @@ You can mix `print()` output with a return value. The printed output
 goes to the `stdout` key, and the last expression becomes `result`:
 
 ``` python
-await pyrun('print("hello"); 1+1')
+await python('print("hello"); 1+1')
 ```
 
     hello
@@ -131,14 +131,14 @@ await pyrun('print("hello"); 1+1')
 Modules can be imported. stderr is also captured:
 
 ``` python
-await pyrun('''
+await python('''
 import warnings
 warnings.warn('a warning')
 "ok"
 ''')
 ```
 
-    <pyrun_3>:2: UserWarning: a warning
+    <python_3>:2: UserWarning: a warning
       warnings.warn('a warning')
 
     'ok'
@@ -149,7 +149,7 @@ things like `re`, `json`, `math`, `itertools`, `collections`, `pathlib`
 every user doesn’t have to repeat the work:
 
 ``` python
-await pyrun('import re; re.findall(r"\\d+", "there are 3 cats and 10 dogs")')
+await python('import re; re.findall(r"\\d+", "there are 3 cats and 10 dogs")')
 ```
 
     ['3', '10']
@@ -188,7 +188,7 @@ def greet(name): return f"Hello, {name}!"
 
 ``` python
 allow(greet) # Or use @allow decorator
-await pyrun('greet("World")')
+await python('greet("World")')
 ```
 
     'Hello, World!'
@@ -205,7 +205,7 @@ functions in the caller’s namespace:
 ``` python
 @allow
 def double(x): return x * 2
-await pyrun('double(21)')
+await python('double(21)')
 ```
 
     42
@@ -220,7 +220,7 @@ import numpy as np
 
 ``` python
 allow(np.array, np.ndarray.sum)
-await pyrun('np.array([1,2,3]).sum()')
+await python('np.array([1,2,3]).sum()')
 ```
 
     np.int64(6)
@@ -236,7 +236,7 @@ class object, and the value is a list of method name strings:
 
 ``` python
 allow({np.ndarray: ['mean', 'reshape', 'tolist']})
-await pyrun('np.array([1,2,3,4]).reshape(2,2).mean()')
+await python('np.array([1,2,3,4]).reshape(2,2).mean()')
 ```
 
     np.float64(2.5)
@@ -262,7 +262,7 @@ still be registered with `allow()` to be callable. Non-callable exports
 (variables, data structures) are available immediately:
 
 ``` python
-await pyrun('result_ = [x**2 for x in range(5)]')
+await python('result_ = [x**2 for x in range(5)]')
 ```
 
 ``` python
@@ -274,7 +274,7 @@ result_
 The exported symbols are real objects in your namespace:
 
 ``` python
-await pyrun('counts_ = {"a": 1, "b": 2}')
+await python('counts_ = {"a": 1, "b": 2}')
 counts_
 ```
 
@@ -294,7 +294,7 @@ are async, and you want the sandbox to be able to call into them without
 workarounds.
 
 ``` python
-await pyrun('''
+await python('''
 import asyncio
 async def fetch(n): return n * 10
 await asyncio.gather(fetch(1), fetch(2), fetch(3))
@@ -312,7 +312,7 @@ blocks writes elsewhere. You can pass `ok_dests` to restrict writes to a
 different set of directory prefixes:
 
 ``` python
-pyrun2 = RunPython(ok_dests=['/tmp'])
+python2 = RunPython(ok_dests=['/tmp'])
 ```
 
 ``` python
@@ -320,13 +320,13 @@ from pathlib import Path
 ```
 
 ``` python
-await pyrun2("Path('/tmp/test_write.txt').write_text('hello')")
+await python2("Path('/tmp/test_write.txt').write_text('hello')")
 ```
 
     5
 
 ``` python
-try: await pyrun2("Path('/etc/evil.txt').write_text('bad')")
+try: await python2("Path('/etc/evil.txt').write_text('bad')")
 except PermissionError as e: print(f'Blocked: {e}')
 ```
 
@@ -336,13 +336,13 @@ The same permission checking applies to `open()` in write mode, not just
 `Path` methods:
 
 ``` python
-await pyrun2("open('/tmp/test_open.txt', 'w').write('hi')")
+await python2("open('/tmp/test_open.txt', 'w').write('hi')")
 ```
 
     2
 
 ``` python
-try: await pyrun2("open('/root/bad.txt', 'w')")
+try: await python2("open('/root/bad.txt', 'w')")
 except PermissionError as e: print(f'Blocked: {e}')
 ```
 
@@ -351,7 +351,7 @@ except PermissionError as e: print(f'Blocked: {e}')
 Read access is unaffected — only writes are gated:
 
 ``` python
-await pyrun2("open('/etc/passwd', 'r').read(10)")
+await python2("open('/etc/passwd', 'r').read(10)")
 ```
 
     '##\n# User '
@@ -361,13 +361,13 @@ Higher-level file operations like
 are also intercepted. The destination is checked against `ok_dests`:
 
 ``` python
-await pyrun2("import shutil; shutil.copy('/tmp/test_write.txt', '/tmp/test_copy.txt')")
+await python2("import shutil; shutil.copy('/tmp/test_write.txt', '/tmp/test_copy.txt')")
 ```
 
     '/tmp/test_copy.txt'
 
 ``` python
-try: await pyrun2("import shutil; shutil.copy('/tmp/test_write.txt', '/root/bad.txt')")
+try: await python2("import shutil; shutil.copy('/tmp/test_write.txt', '/root/bad.txt')")
 except PermissionError as e: print(f'Blocked: {e}')
 ```
 
@@ -379,10 +379,10 @@ uses `default_ok_dests`, which allows writes in `.` and `/tmp` but
 blocks writes elsewhere.
 
 ``` python
-await pyrun("Path('test_default_ok.txt').write_text('ok')")
-await pyrun("Path('/tmp/test_default_tmp.txt').write_text('tmp')")
+await python("Path('test_default_ok.txt').write_text('ok')")
+await python("Path('/tmp/test_default_tmp.txt').write_text('tmp')")
 
-try: await pyrun("Path('/etc/nope.txt').write_text('bad')")
+try: await python("Path('/etc/nope.txt').write_text('bad')")
 except PermissionError as e: print(f'Default blocked: {e}')
 ```
 
@@ -391,9 +391,9 @@ except PermissionError as e: print(f'Default blocked: {e}')
 If you want to disable write protection entirely, pass `ok_dests=None`:
 
 ``` python
-pyrun_unrestricted = RunPython(ok_dests=None)
+python_unrestricted = RunPython(ok_dests=None)
 unrestricted_path = Path.home()/'safepyrun-unrestricted.txt'
-await pyrun_unrestricted(f"Path({str(unrestricted_path)!r}).write_text('ok')")
+await python_unrestricted(f"Path({str(unrestricted_path)!r}).write_text('ok')")
 ```
 
     2
@@ -403,10 +403,10 @@ directory. Path traversal attempts (`../`, `subdir/../../`) are detected
 and blocked, so the sandbox can’t escape the permitted directory:
 
 ``` python
-pyrun_cwd = RunPython(ok_dests=['.'])
+python_cwd = RunPython(ok_dests=['.'])
 
 # Writing to cwd should work
-await pyrun_cwd("Path('test_cwd_ok.txt').write_text('hello')")
+await python_cwd("Path('test_cwd_ok.txt').write_text('hello')")
 ```
 
     5
@@ -418,7 +418,7 @@ Path('test_cwd_ok.txt').unlink(missing_ok=True)
 Writing to /tmp is blocked here since it’s not in ok_dests:
 
 ``` python
-try: await pyrun_cwd("Path('/tmp/nope.txt').write_text('bad')")
+try: await python_cwd("Path('/tmp/nope.txt').write_text('bad')")
 except PermissionError: print("Blocked /tmp as expected")
 ```
 
@@ -428,7 +428,7 @@ Parent traversal is blocked if it resolves to a location outside
 ok_dests:
 
 ``` python
-try: await pyrun_cwd("Path('../escape.txt').write_text('bad')")
+try: await python_cwd("Path('../escape.txt').write_text('bad')")
 except PermissionError: print("Blocked ../ as expected")
 ```
 
@@ -536,4 +536,4 @@ $ echo "1+1" | safepyrun
 ```
 
 The result of the last expression is printed to stdout, matching the
-behaviour of `pyrun` in Python. Errors are reported to stderr.
+behaviour of `python` in Python. Errors are reported to stderr.
