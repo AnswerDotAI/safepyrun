@@ -227,8 +227,7 @@ async def _wait_bg(before):
 
 def _live_policy():
     "Frozen fingerprint of mutable host policy that AI code must not change mid-call."
-    return (frozenset((k, frozenset(v)) for k,v in __pytools__.items()),
-        frozenset(allow_imports), freeze_mon_policy(mon_disable_policy))
+    return (frozenset(allow_imports), freeze_mon_policy(mon_disable_policy))
 
 # %% ../nbs/00_core.ipynb #a183eb50
 async def _run_python(code:str, g=None, ok_dests=(), pre_deny=None, **kwargs):
