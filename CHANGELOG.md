@@ -2,26 +2,19 @@
 
 <!-- do not remove -->
 
-## 0.1.5
+## 0.2.0
+
+### Breaking Changes
+
+- Switch name from `pyrun` to `python` ([#58](https://github.com/AnswerDotAI/safepyrun/issues/58))
 
 ### New Features
 
 - Remove pytools from live policy check ([#59](https://github.com/AnswerDotAI/safepyrun/issues/59))
-
-- Switch name from `pyrun` to `python` ([#58](https://github.com/AnswerDotAI/safepyrun/issues/58))
-
 - Add support for pandas and for opt-out policies with module and class soft allows ([#57](https://github.com/AnswerDotAI/safepyrun/issues/57))
-
 - Prevent AI code from shadowing host helpers or mutating sandbox policy mid-call ([#56](https://github.com/AnswerDotAI/safepyrun/issues/56))
-
-- Await background tasks in _run_python and surface their failures ([#54](https://github.com/AnswerDotAI/safepyrun/issues/54))
-
+- Await background tasks in `_run_python` and surface their failures ([#54](https://github.com/AnswerDotAI/safepyrun/issues/54))
 - Add `allow_imports` ([#53](https://github.com/AnswerDotAI/safepyrun/issues/53))
-
-### Bugs Squashed
-
-- Added missing asyncio import ([#55](https://github.com/AnswerDotAI/safepyrun/pull/55)), thanks to [@kafkasl](https://github.com/kafkasl)
-  - Pyrun is broken for me due to a missing asyncio import.
 
 
 ## 0.1.4
