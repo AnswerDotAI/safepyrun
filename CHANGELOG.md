@@ -2,6 +2,13 @@
 
 <!-- do not remove -->
 
+## 0.2.1
+
+### New Features
+
+- Improve `_find_frame_dict` fallback logic to prefer `__main__` and use safe .get() in `find_var` ([#60](https://github.com/AnswerDotAI/safepyrun/issues/60))
+
+
 ## 0.2.0
 
 ### Breaking Changes
