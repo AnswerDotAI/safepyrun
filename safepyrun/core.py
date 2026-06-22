@@ -27,22 +27,24 @@ import linecache,builtins,inspect,types,subprocess,ast,asyncio
 _rp_globals = ContextVar('_rp_globals', default=None)
 
 def _find_frame_dict(sentinel:str):
-    "Find the globals dict containing sentinel, or calling frame's globals if no sentinel"
+    "Find the globals dict containing sentinel, falling back to __main__"
     frame = currentframe().f_back.f_back
-    if not sentinel: return frame.f_globals
+    if not sentinel:
+        if m := sys.modules.get('__main__'): return m.__dict__
+        return frame.f_globals
     while frame:
         if sentinel in frame.f_globals: return frame.f_globals
         frame = frame.f_back
     # Fall back to RunPython globals stored in ContextVar (e.g. from asyncio.gather)
     rpg = _rp_globals.get()
     if rpg and sentinel in rpg: return rpg
+    if m := sys.modules.get('__main__'): return m.__dict__
     return globals()
-
 
 # %% ../nbs/00_core.ipynb #99383e45
 def find_var(var:str):
     "Search for var in all frames of the call stack"
-    return _find_frame_dict(var)[var]
+    return _find_frame_dict(var).get(var)
 
 # %% ../nbs/00_core.ipynb #14a70f13
 from fastaudit import *
