@@ -206,9 +206,7 @@ async def __run_python(code:str, g=None, ok_dests=None):
     res = None
     if tree.body and isinstance(tree.body[-1], ast.Expr):
         last = tree.body.pop()
-        if tree.body:
-            await run(ast.unparse(ast.Module(tree.body, [])))
-            rg.update(loc) # generators resolve inner vars from globals, so we need to make sure they are in `loc`
+        if tree.body: await run(ast.unparse(ast.Module(tree.body, [])))
         res = await run(ast.unparse(ast.Expression(last.value)), False)
     else: await run(code)
     g.update({k:v for k,v in loc.items() if k not in _noexport})
