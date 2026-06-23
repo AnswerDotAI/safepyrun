@@ -2,6 +2,13 @@
 
 <!-- do not remove -->
 
+## 0.2.2
+
+### New Features
+
+- Revert generator scope workaround ([#61](https://github.com/AnswerDotAI/safepyrun/issues/61))
+
+
 ## 0.2.1
 
 ### New Features
