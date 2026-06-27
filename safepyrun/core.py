@@ -273,7 +273,9 @@ def _find_perm_err(e):
 class RunPython:
     """Execute Python with audit-hook safety checks and access to LLM tools, returning last expression.
     `import` works in the usual way. All builtins are available.
-    Multiline code blocks can be used, including defining functions and variables.
+    Multiline code blocks can be used. By default, defining functions or classes is *not* allowed (`ban_defs=True`); construct `RunPython` with `ban_defs=False` to permit them.
+
+    **Sandbox**: an audit hook blocks risky operations by default (e.g. network), and `socket`/`importlib` imports are banned. To permit one, the user must `allow()` a function that performs it from the real Python process; sandboxed code cannot `allow()` itself.
     **NB**: Locals are exported back to the caller's namespace."""
 
     def __init__(self, g=None, sentinel=None, ok_dests=UNSET, ban_imports=frozenset({'socket','importlib','safepyrun','fastaudit'}),
