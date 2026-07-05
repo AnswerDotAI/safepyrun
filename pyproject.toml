@@ -47,3 +47,6 @@ safepyrun = "safepyrun.core:cli"
 [tool.nbdev]
 allowed_metadata_keys = ['solveit']
 allowed_cell_metadata_keys = ['solveit_ai']
+
+[tool.chkstyle]
+skip_paths = ["_modidx.py"]
