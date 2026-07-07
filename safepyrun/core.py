@@ -99,6 +99,21 @@ def _ctx_check(v, name, obj, a, kw, data):
             return True
     return None if ... in v else False
 
+# %% ../nbs/00_core.ipynb #958ec10b
+_run_data = ContextVar('_run_data', default=None)
+
+def _enter_policies(fn, args, kwargs):
+    "Run any registered AllowPolicy for `fn` at call-entry so it can raise cleanly, before side effects. NB: policies must be pure checks (no state mutation), since for allowed calls they also run again at audit-deny time."
+    data = _run_data.get()
+    if not data: return
+    module = getattr(fn, '__module__', None)
+    qualname = getattr(fn, '__qualname__', getattr(fn, '__name__', None))
+    name = f'{module}.{qualname}' if module and qualname else qualname
+    c = TrackedCall(fn, tuple(args), dict(kwargs), module, qualname, name)
+    _call_allowed(c, data)
+
+set_enter_hook(_enter_policies)
+
 # %% ../nbs/00_core.ipynb #396f7992
 def _call_allowed(c, data):
     pytools = data['pytools']
@@ -256,9 +271,13 @@ async def _run_python(code:str, g=None, ok_dests=(), pre_deny=None, **kwargs):
         ok_dests=ok_dests, mon_policy=freeze_mon_policy(mon_disable_policy)) | kwargs
     denyf = partial(before_deny, pre_deny=pre_deny)
     before,policy = asyncio.all_tasks(), _live_policy()
-    with mk_audit(ok_dests, before_deny=denyf, data=data, allow_imports=frozenset(allow_imports), on_call=on_call)():
-        res = await __run_python(code=code, g=g, ok_dests=ok_dests)
-    await _wait_bg(before)
+    tok = _run_data.set(data)
+    try:
+        with mk_audit(ok_dests, before_deny=denyf, data=data, allow_imports=frozenset(allow_imports), on_call=on_call)():
+            res = await __run_python(code=code, g=g, ok_dests=ok_dests)
+        await _wait_bg(before)
+    finally:
+        _run_data.reset(tok)
     if _live_policy() != policy: raise PermissionError("sandbox policy changed during execution")
     return res
 
