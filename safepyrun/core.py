@@ -93,10 +93,16 @@ def _ctx_check(v, name, obj, a, kw, data):
     if isinstance(v, tuple): v = (v,)
     if name in v: return True
     aa = list(a[1:] if obj is not None and a and a[0] is obj else a)
+    denied = []
     for x in v:
         if isinstance(x, tuple) and (x[0] is ... or x[0] == name):
-            x[1](obj, aa, kw, data)
-            return True
+            try:
+                x[1](obj, aa, kw, data)
+                return True
+            except PermissionError as e:
+                denied.append(str(e))
+                continue
+    if denied: raise PermissionError("; ".join(sorted(denied)))
     return None if ... in v else False
 
 # %% ../nbs/00_core.ipynb #396f7992
