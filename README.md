@@ -6,9 +6,11 @@
 *safepyrun* is an allowlist-based Python sandbox that lets LLMs execute
 code safely(ish) in your real environment. Instead of isolating code in
 a container (which cuts it off from the libraries, data, and tools it
-actually needs) safepyrun runs in-process with controlled access to a
-curated subset of Python’s stdlib, plus any functions you explicitly opt
-in.
+actually needs) safepyrun runs it in-process, while an audit layer
+blocks dangerous side effects: filesystem writes outside approved
+directories, subprocesses, network access, and anything else that could
+damage state, unless they happen inside a callable you have explicitly
+trusted.
 
 It’s the Python counterpart to
 [safecmd](https://github.com/AnswerDotAI/safecmd), which does much the
@@ -26,7 +28,7 @@ $ pip install safepyrun
 
 When an LLM needs to run code on your behalf, the standard advice is to
 sandbox it in a container. The problem is that the whole reason you want
-the LLM running code is so it can interact with your environment – your
+the LLM running code is so it can interact with your environment: your
 files, your libraries, your running processes, your data. A
 containerised sandbox either can’t access any of that, or it requires
 complex volume mounts and dependency mirroring that recreate your
@@ -39,66 +41,58 @@ would give full access to everything… but “everything” includes
 `subprocess.run("rm -rf /")`, etc!
 
 safepyrun takes a middle path. It runs the LLM’s code in your real
-Python process, with access to your real objects, but interposes an
-allowlist that controls which callables are accessible. The curated
-default list covers a large and useful subset of the standard library
-(string manipulation, math, JSON parsing, path inspection, data
-structures, and so on) while excluding anything that writes to the
-filesystem, spawns processes, or modifies system state. You can extend
-the list for your own functions.
+Python process, with access to your real objects, but it watches what
+the code does rather than what it names. Ordinary computation (string
+handling, math, JSON parsing, path inspection, data structures) just
+runs. Side effects are checked: writes are only allowed under approved
+directories, and subprocesses, sockets, and other risky operations are
+denied unless they happen inside a function you registered with
+`allow()`.
 
 The mechanism behind safepyrun is
-[RestrictedPython](https://restrictedpython.readthedocs.io/), a
-long-standing project that compiles Python source code into a modified
-AST (Abstract Syntax Tree) where every attribute access, item access,
-and iteration is routed through hook functions. This means that when the
-LLM’s code does `obj.method()`, it doesn’t go directly to `method` – it
-goes through a gatekeeper that checks whether that callable is on the
-allowlist. The same applies to `getattr`, `getitem`, and `iter`, so
-there’s no easy way to accidentally reach a dangerous function through
-indirect access. safepyrun supplies these hook functions, wiring them up
-to an allowlist of permitted callables.
+[fastaudit](https://github.com/AnswerDotAI/fastaudit), which builds on
+Python’s audit hook system. CPython raises an audit event for every
+sensitive operation: opening a file for writing, spawning a subprocess,
+connecting a socket, deleting a path. While sandboxed code runs,
+fastaudit denies those events unless a policy callback approves them. On
+Python 3.12 and newer it also uses
+[`sys.monitoring`](https://docs.python.org/3/library/sys.monitoring.html#module-sys.monitoring)
+to raise events for calls into native extension modules, which would
+otherwise be invisible to audit hooks (popular audited libraries such as
+numpy are declared safe via the `fastaudit_safe_native` entry point and
+skipped).
 
-Because a lot of modern Python code (and many LLM tool-calling
-frameworks) is async, safepyrun also depends on
-[restrictedpython-async](https://github.com/AnswerDotAI/restrictedpython-async),
-which extends RestrictedPython to handle `await`, `async for`, and
-`async with` expressions.
+safepyrun supplies the policy callback. When an event is about to be
+denied, it walks the call stack (plus fastaudit’s record of active async
+calls) to see whether the operation happened inside a callable
+registered with `allow()`. If so, the operation proceeds; if not, the
+code gets a `PermissionError`. A small AST check on the submitted code
+adds a few blanket rules: no importing modules like `socket` or
+`importlib`, no `def` or `class` statements, and no
+`exec`/`eval`/`compile`.
 
-A lot of the online discussion around RestrictedPython suggests it’s not
-really useful for sandboxing, and that’s true if you’re trying to block
-a determined adversary. But an LLM is not a determined adversary. It’s a
-well-meaning but occasionally clumsy collaborator. The threat model is
-completely different: you don’t need to prevent deliberate escape
-attempts, you need to make it very unlikely that a hallucinated cleanup
-step or a misunderstood request causes damage. This is the same
+In-process sandboxing is no use against a determined adversary, and
+safepyrun doesn’t try to be. But an LLM is not a determined adversary.
+It’s a well-meaning but occasionally clumsy collaborator. The threat
+model is completely different: you don’t need to prevent deliberate
+escape attempts, you need to make it very unlikely that a hallucinated
+cleanup step or a misunderstood request causes damage. This is the same
 “safe-ish” philosophy used in
 [safecmd](https://github.com/AnswerDotAI/safecmd) for bash.
 
 Once you internalise this, the design space opens up. It’s actually fine
-for the LLM to read files, access the internet via `httpx`, parse data,
-and call into your libraries. The things you want to prevent are writes
-to the filesystem, spawning processes, and overwriting important state.
-RestrictedPython gives us the mechanism to enforce this: it rewrites the
-AST to intercept attribute access, iteration, and item access, so that
-every callable goes through an allowlist check.
-
-The allowlist has two tiers. First, a curated subset of the standard
-library that has been audited once so every user doesn’t have to repeat
-the work: things like `re`, `json`, `itertools`, `math`, `collections`,
-`pathlib` (read-only methods), and many more. Second, user-extended
-functions registered via `allow()`, so you can opt in your own project’s
-functions and methods. Symbols the LLM creates are exported back to the
-caller’s namespace by default, unless they would shadow an existing
-callable or module. Names ending with `_` (like `result_`) are always
-exported, even if they shadow. Exported callables must still be
-registered with `allow()` to be callable in subsequent sandbox calls.
+for the LLM to read files, parse data, and call into your libraries. The
+things you want to prevent are filesystem writes, spawned processes,
+network access you didn’t sanction, and overwritten state. Gating
+effects rather than names is what makes the sandbox pleasant: most code
+just works, and the checks only bite when something risky happens.
 
 ## Usage
 
 ``` python
 from safepyrun import *
 from pyskills import *
+import subprocess, httpx
 ```
 
 The main entry point is `python = RunPython()`, which returns an async
@@ -143,10 +137,8 @@ warnings.warn('a warning')
 
     'ok'
 
-A large subset of the standard library is available out of the box –
-things like `re`, `json`, `math`, `itertools`, `collections`, `pathlib`
-(read-only methods), and many more. These have been audited once so that
-every user doesn’t have to repeat the work:
+Most of the standard library works out of the box, since ordinary
+computation raises no audit events:
 
 ``` python
 await python('import re; re.findall(r"\\d+", "there are 3 cats and 10 dogs")')
@@ -154,112 +146,105 @@ await python('import re; re.findall(r"\\d+", "there are 3 cats and 10 dogs")')
 
     ['3', '10']
 
-The default allowlist covers text and data processing (`re`, `json`,
-`csv`, `html`, `textwrap`, `string`, `difflib`, `unicodedata`), math and
-numerics (`math`, `cmath`, `statistics`, `decimal`, `fractions`,
-`random`, `operator`), data structures (`collections`, `heapq`,
-`bisect`, plus methods on all the built-in types), iteration and
-functional tools (`itertools`, `functools`), read-only filesystem access
-(`pathlib`,
-[`os.path`](https://docs.python.org/3/library/os.path.html#module-os.path),
-`fnmatch`), date and time (`datetime`, `time`), URL handling and
-read-only HTTP
-([`urllib.parse`](https://docs.python.org/3/library/urllib.parse.html#module-urllib.parse),
-`httpx.get`, `ipaddress`), encoding and serialization (`base64`,
-`binascii`, `hashlib`, `zlib`, `pickle`, `struct`), introspection
-(`inspect`, `ast`, `keyword`,
-[`sys.getsizeof`](https://docs.python.org/3/library/sys.html#sys.getsizeof)),
-XML parsing
-([`xml.etree.ElementTree`](https://docs.python.org/3/library/xml.etree.elementtree.html#module-xml.etree.ElementTree)),
-and various utilities (`contextlib`, `copy`, `dataclasses`, `enum`,
-`secrets`, `uuid`, `pprint`, `shlex`, `colorsys`, `traceback`).
+Text processing, math, data structures, iteration and functional tools,
+dates, encoding, serialization, and introspection all just run.
+Read-only filesystem access works too, since only writes and deletes are
+gated. The blanket exceptions come from the AST pre-check on submitted
+code: no importing `socket` or `importlib` (or safepyrun itself), no
+`def`/`class`, and no `exec`/`eval`/`compile`.
 
 ### The `allow()` function
 
-Functions you define yourself or import from third-party packages are
-not automatically available. If the sandbox encounters an unregistered
-callable, it raises an error.
-
-To make a function available, register it with `allow()`:
-
-``` python
-def greet(name): return f"Hello, {name}!"
-```
+Functions from your namespace are callable from sandbox code, and pure
+ones just work with no registration. The difference comes when a
+function’s implementation needs an otherwise-denied operation, such as
+running a subprocess:
 
 ``` python
-allow(greet) # Or use @allow decorator
-await python('greet("World")')
+def echo(msg): return subprocess.run(['echo', msg], capture_output=True, text=True).stdout
+
+try: await python('echo("hi")')
+except PermissionError as e: print(f'Blocked: {str(e)[:80]}')
 ```
 
-    'Hello, World!'
+    Blocked: Audit: subprocess.Popen blocked in sandbox with args: ('echo', ['echo', 'hi'], N
 
-The same applies to anything you import from PyPI. For instance, if you
-wanted the LLM to be able to call
-[`numpy.array`](https://numpy.org/doc/stable/reference/generated/numpy.array.html#numpy.array),
-you would register it with `allow('numpy.array')`.
+``` python
+allow(echo)
+await python('echo("hi")')
+```
 
-`allow()` accepts two forms: strings and dicts. The simplest form is a
-bare string, which registers a single name. This works for standalone
-functions in the caller’s namespace:
+    'hi\n'
+
+Registering a callable marks it as trusted: while it runs, the
+operations its implementation performs are permitted. You can also
+register at definition time with the `@allow` decorator, for instance to
+hand the LLM a function that makes a network request:
 
 ``` python
 @allow
-def double(x): return x * 2
-await python('double(21)')
+def getexample(): return httpx.get('http://example.org')
+await python('getexample()')
 ```
 
-    42
+    <Response [200 OK]>
 
-For methods on modules or classes, use dotted string syntax. The string
-should match how the sandbox will look up the callable, which is
-`ClassName.method` or `module.function`:
+Methods work the same way: pass the method object and it’s registered
+under its class, so it’s allowed on any instance of that class:
 
 ``` python
-import numpy as np
+class Shell:
+    def date(self): return subprocess.run(['date'], capture_output=True, text=True).stdout
+    def whoami(self): return subprocess.run(['whoami'], capture_output=True, text=True).stdout
+
+sh = Shell()
+allow(Shell.date)
+await python('sh.date()')
 ```
+
+    'Wed Jul  8 07:22:57 AEST 2026\n'
+
+The dict form registers several methods on one class or module at once.
+The key is the actual module or class object, and the value is a list of
+method names:
 
 ``` python
-allow(np.array, np.ndarray.sum)
-await python('np.array([1,2,3]).sum()')
+allow({Shell: ['date', 'whoami']})
+await python('sh.whoami()')
 ```
 
-    np.int64(6)
+    'jhoward\n'
 
-Note that the string must use the actual class or module name as it
-appears in Python, not the alias. In the example above, even though the
-sandbox code uses `np`, the allowlist entry is `'numpy.array'` because
-`numpy` is the module’s real name.
-
-The dict form is a convenient shorthand for registering multiple methods
-on the same module or class at once. The key is the actual module or
-class object, and the value is a list of method name strings:
+Dict values can also be `(name, policy)` tuples for per-call validation
+(see write policies below), and several items can be registered in a
+single call:
 
 ``` python
-allow({np.ndarray: ['mean', 'reshape', 'tolist']})
-await python('np.array([1,2,3,4]).reshape(2,2).mean()')
+allow(echo, {Shell: ['date', 'whoami']})
 ```
 
-    np.float64(2.5)
+Callable *instances* are registered under the instance itself, so each
+one is trusted individually. This is how dynamically-generated client
+ops, like [fastspec](https://github.com/AnswerDotAI/fastspec)’s, are
+scoped one op at a time even though every op shares the same class and
+`__call__`.
 
-The dict form does two things: it registers the class/module name itself
-(so it can be called as a constructor or accessed as a namespace), and
-it registers each `ClassName.method` pair. You can mix strings and dicts
-in a single `allow()` call:
-
-``` python
-allow('my_func', {np.linalg: ['norm', 'det']})
-```
+Native extension modules are a special case: calls into them are
+monitored, so a native library either needs registering with `allow()`
+or, for popular audited libraries (numpy, pandas’ core, `regex`,
+`orjson`, and others), is declared safe via fastaudit’s
+`fastaudit_safe_native` entry point and works with no registration. The
+`allow_matplotlib()` and `allow_pandas()` helpers register sensible
+defaults for those two libraries, including save methods gated by write
+policies.
 
 ### The `_` suffix export convention
 
 All symbols created in the sandbox are exported back to the caller’s
-namespace by default — unless the name already exists and the new value
+namespace by default, unless the name already exists and the new value
 is callable or a module (to prevent accidental shadowing). Names ending
-with `_` (but not starting with `_`) are always exported regardless,
-even if they shadow. Note that exported callables are **not**
-automatically available to call in subsequent sandbox runs — they must
-still be registered with `allow()` to be callable. Non-callable exports
-(variables, data structures) are available immediately:
+with `_` (but not starting with `_`) are always exported, even if they
+shadow:
 
 ``` python
 await python('result_ = [x**2 for x in range(5)]')
@@ -294,9 +279,15 @@ are async, and you want the sandbox to be able to call into them without
 workarounds.
 
 ``` python
-await python('''
 import asyncio
+```
+
+``` python
 async def fetch(n): return n * 10
+```
+
+``` python
+await python('''
 await asyncio.gather(fetch(1), fetch(2), fetch(3))
 ''')
 ```
@@ -305,11 +296,9 @@ await asyncio.gather(fetch(1), fetch(2), fetch(3))
 
 ## Writable path permissions
 
-By default,
-[`RunPython()`](https://AnswerDotAI.github.io/safepyrun/core.html#runpython)
-allows writes to the current working directory (`.`) and `/tmp`, and
-blocks writes elsewhere. You can pass `ok_dests` to restrict writes to a
-different set of directory prefixes:
+By default, `RunPython()` allows writes to the current working directory
+(`.`) and `/tmp`, and blocks writes elsewhere. You can pass `ok_dests`
+to restrict writes to a different set of directory prefixes:
 
 ``` python
 python2 = RunPython(ok_dests=['/tmp'])
@@ -330,7 +319,7 @@ try: await python2("Path('/etc/evil.txt').write_text('bad')")
 except PermissionError as e: print(f'Blocked: {e}')
 ```
 
-    Blocked: Dest '/etc/evil.txt' not allowed; permitted: ('/tmp',)
+    Blocked: open '/etc/evil.txt' not in ('/private/tmp',)
 
 The same permission checking applies to `open()` in write mode, not just
 `Path` methods:
@@ -346,7 +335,7 @@ try: await python2("open('/root/bad.txt', 'w')")
 except PermissionError as e: print(f'Blocked: {e}')
 ```
 
-    Blocked: Dest '/root/bad.txt' not allowed; permitted: ('/tmp',)
+    Blocked: open '/root/bad.txt' not in ('/private/tmp',)
 
 Read access is unaffected — only writes are gated:
 
@@ -371,12 +360,10 @@ try: await python2("import shutil; shutil.copy('/tmp/test_write.txt', '/root/bad
 except PermissionError as e: print(f'Blocked: {e}')
 ```
 
-    Blocked: Dest '/root/bad.txt' not allowed; permitted: ('/tmp',)
+    Blocked: shutil.copyfile '/root/bad.txt' not in ('/private/tmp',)
 
-By default,
-[`RunPython()`](https://AnswerDotAI.github.io/safepyrun/core.html#runpython)
-uses `default_ok_dests`, which allows writes in `.` and `/tmp` but
-blocks writes elsewhere.
+By default, `RunPython()` uses `default_ok_dests`, which allows writes
+in `.` and `/tmp` but blocks writes elsewhere.
 
 ``` python
 await python("Path('test_default_ok.txt').write_text('ok')")
@@ -384,19 +371,19 @@ await python("Path('/tmp/test_default_tmp.txt').write_text('tmp')")
 
 try: await python("Path('/etc/nope.txt').write_text('bad')")
 except PermissionError as e: print(f'Default blocked: {e}')
+
+Path('test_default_ok.txt').unlink()
 ```
 
-    Default blocked: Dest '/etc/nope.txt' not allowed; permitted: ('.', '/tmp')
+    Default blocked: open '/etc/nope.txt' not in ('.', '/private/tmp', '/Users/jhoward/aai-ws', '/Users/jhoward/git')
 
 If you want to disable write protection entirely, pass `ok_dests=None`:
 
 ``` python
-python_unrestricted = RunPython(ok_dests=None)
-unrestricted_path = Path.home()/'safepyrun-unrestricted.txt'
-await python_unrestricted(f"Path({str(unrestricted_path)!r}).write_text('ok')")
+python_un = RunPython(ok_dests=None)
+un_path = Path.home()/'safepyrun-un.txt'
+await python_un(f"Path({str(un_path)!r}).write_text('ok')")
 ```
-
-    2
 
 You can use `'.'` to allow writes relative to the current working
 directory. Path traversal attempts (`../`, `subdir/../../`) are detected
@@ -451,8 +438,8 @@ blocked:
 
 ``` python
 pp = PosAllowPolicy(1, 'dst')
-pp(None, ['src', '/tmp/ok'], {}, ['/tmp'])
-try: pp(None, ['src', '/root/bad'], {}, ['/tmp'])
+pp(None, ['src', '/tmp/ok'], {}, dict(ok_dests=['/tmp']))
+try: pp(None, ['src', '/root/bad'], {}, dict(ok_dests=['/tmp']))
 except PermissionError: print("PosAllowPolicy correctly blocked /root/bad")
 ```
 
@@ -501,10 +488,9 @@ allow({Path: [('write_text', ExtWritePolicy(['.csv', '.json', '.txt']))]})
 defaults are registered. This lets you permanently extend the sandbox
 allowlists without modifying the package. The config file is executed
 with all `safepyrun.core` globals already available, so no imports are
-needed. This includes `allow`,
-[`allow_write_types`](https://AnswerDotAI.github.io/safepyrun/core.html#allow_write_types),
-`AllowPolicy`, `PathWritePolicy`, `PosAllowPolicy`, `OpenWritePolicy`,
-and all standard library modules already imported by the module.
+needed. This includes `allow`, `allow_write_types`, `AllowPolicy`,
+`PathWritePolicy`, `PosAllowPolicy`, `OpenWritePolicy`, and all standard
+library modules already imported by the module.
 
 Example `~/.config/safepyrun/config.py` (Linux) or
 `~/Library/Application Support/safepyrun/config.py` (macOS):

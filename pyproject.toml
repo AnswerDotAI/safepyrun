@@ -16,17 +16,15 @@ classifiers = [
     "Programming Language :: Python :: 3 :: Only",
 ]
 dependencies = [
-  "restrictedpython-async",
-  "restrictedpython",
   "fastaudit>=0.2.1",
-  "pyskills>=0.0.9",
+  "pyskills>=0.0.17",
   "fastcore>=1.12.27",
   "httpx",
   "matplotlib>=3.10.8",
 ]
 
 [project.optional-dependencies]
-dev = ['numpy', 'matplotlib']
+dev = ['numpy', 'matplotlib', 'ipykernel_helper']
 
 [project.urls]
 Repository = "https://github.com/AnswerDotAI/safepyrun"
