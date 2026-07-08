@@ -2,6 +2,13 @@
 
 <!-- do not remove -->
 
+## 0.2.3
+
+### New Features
+
+- add instance-keyed allow(), `set_data`(), and policy tamper detection ([#63](https://github.com/AnswerDotAI/safepyrun/issues/63))
+
+
 ## 0.2.2
 
 ### New Features
