@@ -24,7 +24,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ['numpy', 'matplotlib', 'ipykernel_helper']
+dev = ['numpy', 'matplotlib', 'ipykernel_helper>=0.0.58']
 
 [project.urls]
 Repository = "https://github.com/AnswerDotAI/safepyrun"
