@@ -18,7 +18,7 @@ classifiers = [
 dependencies = [
   "fastaudit>=0.2.1",
   "pyskills>=0.0.17",
-  "fastcore>=1.12.27",
+  "fastcore>=1.14.6",
   "httpx",
   "matplotlib>=3.10.8",
 ]

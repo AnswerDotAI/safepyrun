@@ -388,11 +388,12 @@ def load_ipython_extension(ip):
     create_python_magic(ip, python)
 
 # %% ../nbs/00_core.ipynb #30964442
-from fastcore.script import call_parse, Param
+from fastcore.script import call_parse
+from typing import Annotated
 
 # %% ../nbs/00_core.ipynb #74c49b7c
 @call_parse
-def cli(path: Param("Path to script, or '-' for stdin", str, opt=False, nargs='?', default='-')):
+def cli(path: Annotated[str, "Path to script, or '-' for stdin", dict(opt=False, nargs='?', default='-')]):
     "Run a python script file in the safepyrun sandbox"
     try:
         code = sys.stdin.read() if path == '-' else Path(path).read_text()
