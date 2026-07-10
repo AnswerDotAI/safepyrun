@@ -126,10 +126,9 @@ def _call_allowed(c, data):
     if mod and '.' in qn:
         cls = getattr(mod, qn.rsplit('.', 1)[0], None)
         obj = c.args[0] if cls and c.args and isinstance(c.args[0], cls) else None
-        try: haskey = obj is not None and obj in pytools
-        except TypeError: haskey = False
-        if haskey:
-            if (res := _ctx_check(pytools[obj], nm, obj, c.args, c.kwargs, data)): return True
+        obj_pytools = next((v for k,v in pytools.items() if k is obj), None) if obj is not None else None
+        if obj_pytools is not None:
+            if (res := _ctx_check(obj_pytools, nm, obj, c.args, c.kwargs, data)): return True
             if res is None: soft = True
         typs = L(type(obj).__mro__ if obj is not None else ()) + L([cls]) + L(getattr(cls, '__mro__', ()))
         for o in typs.unique():
