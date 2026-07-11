@@ -156,13 +156,21 @@ class CallInfo:
         if name is None and module and qualname: name = f'{module}.{qualname}'
         store_attr()
 
+def _native_call(name):
+    "CallInfo for native callee dotted `name`, split into module/qualname via `sys.modules`"
+    parts = name.split('.')
+    for i in range(len(parts)-1, 0, -1):
+        if '.'.join(parts[:i]) in sys.modules: return CallInfo(module='.'.join(parts[:i]), qualname='.'.join(parts[i:]), name=name, source='native')
+    return CallInfo(qualname=name, name=name, source='native')
+
 class DenyInfo:
     def __init__(self, event, args, frame, msg, data, calls, frame_args):
         self.event,self.data = event,data
         self.raw = RawDenyInfo(args, frame, msg, calls, frame_args)
+        self.native_calls = L(_native_call(args[1])) if event=='fastaudit.call' and len(args)>1 else L()
         self.tracked_calls = L(calls).map(self._tracked_call)
         self.frame_calls = L(self._frame_calls())
-        self.calls = self.tracked_calls + self.frame_calls
+        self.calls = self.native_calls + self.tracked_calls + self.frame_calls
         self.call = first(self.calls, None)
         self.args = self.call.args if self.call else ()
         self.kwargs = self.call.kwargs if self.call else {}
