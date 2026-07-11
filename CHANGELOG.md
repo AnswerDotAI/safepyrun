@@ -2,6 +2,17 @@
 
 <!-- do not remove -->
 
+## 0.2.4
+
+### New Features
+
+- Honor allow registrations for native extension methods ([#66](https://github.com/AnswerDotAI/safepyrun/issues/66))
+
+### Bugs Squashed
+
+- Fix haskey check in half built objs ([#65](https://github.com/AnswerDotAI/safepyrun/pull/65)), thanks to [@KeremTurgutlu](https://github.com/KeremTurgutlu)
+- Make `AllowPolicy` check additive ([#64](https://github.com/AnswerDotAI/safepyrun/pull/64)), thanks to [@KeremTurgutlu](https://github.com/KeremTurgutlu)
+
 ## 0.2.3
 
 ### New Features
