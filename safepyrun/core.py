@@ -144,7 +144,9 @@ def _ctx_allowed(info):
     for c in info.calls:
         if (res := _call_allowed(c, info.data)): return True
         if res is None: soft = True
-    return soft
+    # soft `...` trusts a module's monitored *calls*, not its side effects: only native-call
+    # events may be soft-allowed, so a compute allow can't bypass `open`/`ok_dests` confinement
+    return soft and getattr(info, 'event', None) == 'fastaudit.call'
 
 # %% ../nbs/00_core.ipynb #53fe97bf
 class RawDenyInfo:
