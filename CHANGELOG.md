@@ -2,6 +2,13 @@
 
 <!-- do not remove -->
 
+## 0.2.5
+
+### New Features
+
+- Skip AST user-code checks when stripped code fails to parse, and skip over magics when possible ([#68](https://github.com/AnswerDotAI/safepyrun/issues/68))
+
+
 ## 0.2.4
 
 ### New Features
