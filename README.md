@@ -147,7 +147,7 @@ allow(echo, {Shell: ['date', 'whoami']})
 
 Callable *instances* are registered under the instance itself, so each one is trusted individually. This is how dynamically-generated client ops, like [fastspec](https://github.com/AnswerDotAI/fastspec)’s, are scoped one op at a time even though every op shares the same class and `__call__`.
 
-Native extension modules are a special case: calls into them are monitored, so a native library either needs registering with `allow()` or, for popular audited libraries (numpy, pandas’ core, `regex`, `orjson`, and others), is declared safe via fastaudit’s `fastaudit_safe_native` entry point and works with no registration. The [`allow_matplotlib()`](https://AnswerDotAI.github.io/safepyrun/core.html#allow_matplotlib) and [`allow_pandas()`](https://AnswerDotAI.github.io/safepyrun/core.html#allow_pandas) helpers register sensible defaults for those two libraries, including save methods gated by write policies.
+Native extension modules are a special case: calls into them are monitored, so a native library either needs registering with `allow()` or, for popular audited libraries (numpy, pandas’ core, `regex`, `orjson`, and others), is declared safe via fastaudit’s `fastaudit_safe_native` entry point and works with no registration. The `allow_matplotlib()` and `allow_pandas()` helpers register sensible defaults for those two libraries, including save methods gated by write policies.
 
 ### The `_` suffix export convention
 
@@ -196,7 +196,7 @@ await asyncio.gather(fetch(1), fetch(2), fetch(3))
 
 ## Writable path permissions
 
-By default, [`RunPython()`](https://AnswerDotAI.github.io/safepyrun/core.html#runpython) allows writes to the current working directory (`.`) and `/tmp`, and blocks writes elsewhere. You can pass `ok_dests` to restrict writes to a different set of directory prefixes:
+By default, `RunPython()` allows writes to the current working directory (`.`) and `/tmp`, and blocks writes elsewhere. You can pass `ok_dests` to restrict writes to a different set of directory prefixes:
 
 ``` python
 python2 = RunPython(ok_dests=['/tmp'])
@@ -257,7 +257,7 @@ except PermissionError as e: print(f'Blocked: {e}')
 
     Blocked: shutil.copyfile '/root/bad.txt' not in ('/private/tmp',)
 
-By default, [`RunPython()`](https://AnswerDotAI.github.io/safepyrun/core.html#runpython) uses `default_ok_dests`, which allows writes in `.` and `/tmp` but blocks writes elsewhere.
+By default, `RunPython()` uses `default_ok_dests`, which allows writes in `.` and `/tmp` but blocks writes elsewhere.
 
 ``` python
 await python("Path('test_default_ok.txt').write_text('ok')")
