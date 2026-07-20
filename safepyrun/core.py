@@ -323,7 +323,10 @@ class RunPython:
 
     async def __call__(self, code:str):
         try:
-            _check_user_code(ast.parse(code), ban_imports=self.ban_imports, ban_defs=self.ban_defs)
+            chk = take_lines(code, r'^(#|%%|$)', drop=True)
+            try: tree = ast.parse(chk)
+            except SyntaxError: tree = None
+            if tree: _check_user_code(tree, ban_imports=self.ban_imports, ban_defs=self.ban_defs)
             return await _run_python(code, g=self.g, ok_dests=self.ok_dests, pre_deny=self.pre_deny, **self.kwargs)
         except Exception as e:
             e = _find_perm_err(e)
