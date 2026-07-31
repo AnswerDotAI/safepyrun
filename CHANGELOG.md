@@ -2,6 +2,13 @@
 
 <!-- do not remove -->
 
+## 0.2.6
+
+### New Features
+
+- Add yolo mode to RunPython to bypass sandbox auditing, and use IPython cell transforms before AST checks ([#69](https://github.com/AnswerDotAI/safepyrun/issues/69))
+
+
 ## 0.2.5
 
 ### New Features
@@ -265,4 +272,3 @@
 ## 0.0.1
 
 - init version
-
