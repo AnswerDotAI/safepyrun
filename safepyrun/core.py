@@ -17,6 +17,7 @@ from pyskills import __pytools__
 from inspect import currentframe
 from contextvars import ContextVar
 from types import MappingProxyType
+from contextlib import nullcontext
 
 import linecache,builtins,inspect,ast,asyncio
 
@@ -263,16 +264,18 @@ def _live_policy():
         _freeze(dict(__pytools__)), _freeze(_data_defaults))
 
 # %% ../nbs/00_core.ipynb #a183eb50
-async def _run_python(code:str, g=None, ok_dests=(), pre_deny=None, **kwargs):
+async def _run_python(code:str, g=None, ok_dests=(), pre_deny=None, yolo=False, **kwargs):
     _rp_globals.set(g)
     data = _data_defaults | dict(pytools=MappingProxyType({k:frozenset(v) for k,v in __pytools__.items()}),
         ok_dests=ok_dests, mon_policy=freeze_mon_policy(mon_disable_policy)) | kwargs
     denyf = partial(before_deny, pre_deny=pre_deny)
     before,policy = asyncio.all_tasks(), _live_policy()
-    with mk_audit(ok_dests, before_deny=denyf, data=data, allow_imports=frozenset(allow_imports), on_call=on_call)():
-        res = await __run_python(code=code, g=g, ok_dests=ok_dests)
-    await _wait_bg(before)
-    if _live_policy() != policy: raise PermissionError("sandbox policy changed during execution")
+    ctx = nullcontext() if yolo else mk_audit(
+        ok_dests, before_deny=denyf, data=data, allow_imports=frozenset(allow_imports), on_call=on_call)()
+    with ctx: res = await __run_python(code=code, g=g, ok_dests=ok_dests)
+    if not yolo:
+        await _wait_bg(before)
+        if _live_policy() != policy: raise PermissionError("sandbox policy changed during execution")
     return res
 
 # %% ../nbs/00_core.ipynb #5d38a1d0
@@ -310,7 +313,7 @@ class RunPython:
     **NB**: Locals are exported back to the caller's namespace."""
 
     def __init__(self, g=None, sentinel=None, ok_dests=UNSET, ban_imports=frozenset({'socket','importlib','safepyrun','fastaudit'}),
-        ban_defs=True, pre_deny=None, **kwargs):
+        ban_defs=True, pre_deny=None, yolo=False, **kwargs):
         if ok_dests is UNSET: ok_dests = default_ok_dests
         if g is None:
             try: ip = get_ipython()
@@ -319,15 +322,18 @@ class RunPython:
         if g is None: g = _find_frame_dict(sentinel)
         self.g = g
         self.ok_dests = ok_dests or ()
-        self.ban_imports,self.ban_defs,self.pre_deny,self.kwargs = ban_imports,ban_defs,pre_deny,kwargs
+        self.ban_imports,self.ban_defs,self.pre_deny,self.yolo,self.kwargs = ban_imports,ban_defs,pre_deny,yolo,kwargs
 
     async def __call__(self, code:str):
         try:
-            chk = take_lines(code, r'^(#|%%|$)', drop=True)
-            try: tree = ast.parse(chk)
+            try: ip = get_ipython()
+            except NameError: ip = None
+            if ip: code = ip.transform_cell(code)
+            if self.yolo: return await _run_python(code, g=self.g, ok_dests=self.ok_dests, yolo=True, **self.kwargs)
+            try: tree = ast.parse(code)
             except SyntaxError: tree = None
             if tree: _check_user_code(tree, ban_imports=self.ban_imports, ban_defs=self.ban_defs)
-            return await _run_python(code, g=self.g, ok_dests=self.ok_dests, pre_deny=self.pre_deny, **self.kwargs)
+            return await _run_python(code, g=self.g, ok_dests=self.ok_dests, pre_deny=self.pre_deny, yolo=self.yolo, **self.kwargs)
         except Exception as e:
             e = _find_perm_err(e)
             tb = e.__traceback__
