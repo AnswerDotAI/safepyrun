@@ -295,10 +295,13 @@ def _check_user_code(tree, ban_imports, ban_defs):
 
 # %% ../nbs/00_core.ipynb #5447b52c
 def _find_perm_err(e):
-    "Walk the exception chain looking for a PermissionError"
+    "Walk the exception chain, including exception group members, looking for a PermissionError"
     pe = e
     while pe:
         if isinstance(pe, PermissionError): return pe
+        if isinstance(pe, BaseExceptionGroup):
+            for x in pe.exceptions:
+                if isinstance((r := _find_perm_err(x)), PermissionError): return r
         pe = pe.__cause__ or pe.__context__
     return e
 
