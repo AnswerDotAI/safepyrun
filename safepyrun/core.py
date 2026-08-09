@@ -376,7 +376,6 @@ def allow_matplotlib():
     import matplotlib.pyplot as plt
     from matplotlib.figure import Figure
 
-    allow({'matplotlib.*':...})
     _savefig_wp = PosAllowPolicy(0, 'fname')
     allow({Figure: [('savefig', _savefig_wp)], plt: [('savefig', _savefig_wp)]})
 
@@ -384,8 +383,6 @@ def allow_matplotlib():
 # %% ../nbs/00_core.ipynb #9ed471fc
 def allow_pandas():
     import pandas as pd
-
-    allow({'pandas.*': ...})
 
     allow({pd.DataFrame: ['to_csv', 'to_json', 'to_hdf']}, allow_policy=PosAllowPolicy(0, 'path_or_buf'))
     allow({pd.DataFrame: ['to_string', 'to_html', 'to_latex', 'to_markdown']}, allow_policy=PosAllowPolicy(0, 'buf'))
