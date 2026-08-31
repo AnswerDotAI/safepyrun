@@ -2,6 +2,18 @@
 
 <!-- do not remove -->
 
+## 0.2.7
+
+### New Features
+
+- Remove blanket matplotlib.* and pandas.* trust from allow_ helpers ([#70](https://github.com/AnswerDotAI/safepyrun/issues/70))
+- explain allow ([#52](https://github.com/AnswerDotAI/safepyrun/pull/52)), thanks to [@RensDimmendaal](https://github.com/RensDimmendaal)
+
+### Bugs Squashed
+
+- Avoid the CPython monitoring crash in the pandas lesson ([#72](https://github.com/AnswerDotAI/safepyrun/pull/72)), thanks to [@jph00](https://github.com/jph00)
+
+
 ## 0.2.6
 
 ### New Features
