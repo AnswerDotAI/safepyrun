@@ -106,9 +106,20 @@ def _ctx_check(v, name, obj, a, kw, data):
     if denied: raise PermissionError("; ".join(sorted(denied)))
     return None if ... in v else False
 
+# %% ../nbs/00_core.ipynb #a028fbdf
+def _receipts(data):
+    "`(key, entry)` pytools that import-allowed packages registered during this run"
+    return [o for ev,args in data.get('import_approved', ()) if ev=='pyskills.allowed' for o in args[0]]
+
+def _pytools(data):
+    "Registered pytools, plus this run's receipts"
+    res = {k:set(v) for k,v in data['pytools'].items()}
+    for k,e in _receipts(data): res.setdefault(k, set()).add(e)
+    return res
+
 # %% ../nbs/00_core.ipynb #396f7992
 def _call_allowed(c, data):
-    pytools = data['pytools']
+    pytools = _pytools(data)
     mod = sys.modules.get(c.module)
     qn,nm = c.qualname,getattr(c.fn, '__name__', None) or (c.qualname or '').rsplit('.', 1)[-1]
     if not nm: return False
@@ -258,16 +269,16 @@ def _freeze(o):
         return o
     except TypeError: return id(o)
 
-def _live_policy():
-    "Frozen fingerprint of mutable host policy that AI code must not change mid-call."
-    return (frozenset(allow_imports), freeze_mon_policy(mon_disable_policy),
-        _freeze(dict(__pytools__)), _freeze(_data_defaults))
+def _live_policy(rm=()):
+    "Frozen fingerprint of mutable host policy that AI code must not change mid-call, leaving out the `(key, entry)` pytools in `rm`"
+    pt = frozenset((k,e) for k,v in __pytools__.items() for e in v) - frozenset(rm)
+    return (frozenset(allow_imports), freeze_mon_policy(mon_disable_policy), pt, _freeze(_data_defaults))
 
 # %% ../nbs/00_core.ipynb #a183eb50
 async def _run_python(code:str, g=None, ok_dests=(), pre_deny=None, yolo=False, **kwargs):
     _rp_globals.set(g)
     data = _data_defaults | dict(pytools=MappingProxyType({k:frozenset(v) for k,v in __pytools__.items()}),
-        ok_dests=ok_dests, mon_policy=freeze_mon_policy(mon_disable_policy)) | kwargs
+        ok_dests=ok_dests, mon_policy=freeze_mon_policy(mon_disable_policy), import_approved=[]) | kwargs
     denyf = partial(before_deny, pre_deny=pre_deny)
     before,policy = asyncio.all_tasks(), _live_policy()
     ctx = nullcontext() if yolo else mk_audit(
@@ -275,7 +286,7 @@ async def _run_python(code:str, g=None, ok_dests=(), pre_deny=None, yolo=False, 
     with ctx: res = await __run_python(code=code, g=g, ok_dests=ok_dests)
     if not yolo:
         await _wait_bg(before)
-        if _live_policy() != policy: raise PermissionError("sandbox policy changed during execution")
+        if _live_policy(_receipts(data)) != policy: raise PermissionError("sandbox policy changed during execution")
     return res
 
 # %% ../nbs/00_core.ipynb #5d38a1d0
