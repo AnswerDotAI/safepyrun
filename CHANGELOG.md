@@ -2,6 +2,13 @@
 
 <!-- do not remove -->
 
+## 0.2.8
+
+### New Features
+
+- Set `input` from builtins ([#73](https://github.com/AnswerDotAI/safepyrun/issues/73))
+
+
 ## 0.2.7
 
 ### New Features
