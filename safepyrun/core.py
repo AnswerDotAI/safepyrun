@@ -210,7 +210,7 @@ _noexport = {'python', 'allow'}  # host-injected helpers must not be shadowed ba
 
 async def __run_python(code:str, g=None, ok_dests=None):
     _rp_globals.set(g)
-    rg = g | dict(__builtins__=_builtins, __name__='<python>')
+    rg = g | dict(__builtins__=_builtins | dict(input=builtins.input), __name__='<python>')
     loc = {}
     async def run(src, is_exec=True):
         comp = compile(src, srcfn(src), 'exec' if is_exec else 'eval', flags=ast.PyCF_ALLOW_TOP_LEVEL_AWAIT)
