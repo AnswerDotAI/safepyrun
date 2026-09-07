@@ -16,8 +16,8 @@ classifiers = [
     "Programming Language :: Python :: 3 :: Only",
 ]
 dependencies = [
-  "fastaudit>=0.2.9",
-  "pyskills>=0.0.17",
+  "fastaudit>=0.2.10",
+  "pyskills>=0.0.28",
   "fastcore>=1.14.6",
   "httpx",
   "matplotlib>=3.10.8",
