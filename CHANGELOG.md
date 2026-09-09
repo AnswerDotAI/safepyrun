@@ -2,6 +2,13 @@
 
 <!-- do not remove -->
 
+## 0.2.9
+
+### New Features
+
+- Auto-create user config with `default_ok_dests`, honor `ok_dests`=None for unrestricted writes, and ban submodules of banned imports ([#74](https://github.com/AnswerDotAI/safepyrun/issues/74))
+
+
 ## 0.2.8
 
 ### New Features
