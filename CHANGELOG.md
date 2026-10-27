@@ -2,6 +2,13 @@
 
 <!-- do not remove -->
 
+## 0.2.10
+
+### New Features
+
+- Rename injected python helper to py in IPython extension and noexport set ([#75](https://github.com/AnswerDotAI/safepyrun/issues/75))
+
+
 ## 0.2.9
 
 ### New Features
