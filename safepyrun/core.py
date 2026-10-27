@@ -208,7 +208,7 @@ srcfn.i=0
 
 # %% ../nbs/00_core.ipynb #7dad9339
 _builtins = dict(builtins.__dict__)
-_noexport = {'python', 'allow'}  # host-injected helpers must not be shadowed back into user globals
+_noexport = {'py', 'allow'}  # host-injected helpers must not be shadowed back into user globals
 
 async def __run_python(code:str, g=None, ok_dests=None):
     _rp_globals.set(g)
@@ -402,9 +402,9 @@ def allow_pandas():
 # %% ../nbs/00_core.ipynb #8d1cb417
 def load_ipython_extension(ip):
     ns = ip.user_ns
-    ns['python'] = python = RunPython(g=ns)
+    ns['py'] = py = RunPython(g=ns)
     ns['allow'] = allow
-    create_python_magic(ip, python)
+    create_python_magic(ip, py)
 
 # %% ../nbs/00_core.ipynb #30964442
 from fastcore.script import call_parse
