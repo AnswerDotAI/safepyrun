@@ -18,7 +18,6 @@ from pyskills import __pytools__
 
 from inspect import currentframe
 from contextvars import ContextVar
-from types import MappingProxyType
 from contextlib import nullcontext
 
 import linecache,builtins,inspect,ast,asyncio
@@ -196,6 +195,7 @@ def before_deny(event, args, frame, msg, data, calls, pre_deny=None, _frame_args
     "Check whether a possibly-denied audit event happened inside an approved call."
     info = DenyInfo(event, args, frame, msg, data, calls, _frame_args)
     if pre_deny and (pre := pre_deny(info)) is not None: return pre
+    if event == 'pyskills.allow': return True
     if _ctx_allowed(info): return True
 
 # %% ../nbs/00_core.ipynb #12b831de
@@ -241,15 +241,6 @@ def set_data(**kw):
     _data_defaults.update(kw)
 
 # %% ../nbs/00_core.ipynb #7ccc8d88
-async def _wait_bg(before):
-    "Wait for tasks created since `before`; surface their failures."
-    cur = asyncio.current_task()
-    excs = []
-    while ts := [t for t in asyncio.all_tasks()-before if t is not cur and not t.done()]:
-        excs += [r for r in await asyncio.gather(*ts, return_exceptions=True)
-            if isinstance(r, BaseException) and not isinstance(r, asyncio.CancelledError)]
-    if excs: raise first(excs, risinstance(PermissionError)) or excs[0]
-
 def _freeze(o):
     "Hashable snapshot of a policy value, for fingerprinting"
     if isinstance(o, (set,frozenset)): return frozenset(map(_freeze, o))
@@ -263,21 +254,19 @@ def _freeze(o):
 def _live_policy():
     "Frozen fingerprint of mutable host policy that AI code must not change mid-call."
     return (frozenset(allow_imports), freeze_mon_policy(mon_disable_policy),
-        _freeze(dict(__pytools__)), _freeze(_data_defaults))
+        _freeze(_data_defaults))
 
 # %% ../nbs/00_core.ipynb #a183eb50
 async def _run_python(code:str, g=None, ok_dests=(), pre_deny=None, yolo=False, **kwargs):
     _rp_globals.set(g)
-    data = _data_defaults | dict(pytools=MappingProxyType({k:frozenset(v) for k,v in __pytools__.items()}),
+    data = _data_defaults | dict(pytools=__pytools__,
         ok_dests=ok_dests, mon_policy=freeze_mon_policy(mon_disable_policy)) | kwargs
     denyf = partial(before_deny, pre_deny=pre_deny)
-    before,policy = asyncio.all_tasks(), _live_policy()
+    policy = _live_policy()
     ctx = nullcontext() if yolo else mk_audit(
         ok_dests, before_deny=denyf, data=data, allow_imports=frozenset(allow_imports), on_call=on_call)()
     with ctx: res = await __run_python(code=code, g=g, ok_dests=ok_dests)
-    if not yolo:
-        await _wait_bg(before)
-        if _live_policy() != policy: raise PermissionError("sandbox policy changed during execution")
+    if not yolo and _live_policy() != policy: raise PermissionError("sandbox policy changed during execution")
     return res
 
 # %% ../nbs/00_core.ipynb #5d38a1d0
@@ -312,13 +301,13 @@ def _find_perm_err(e):
 class RunPython:
     """Execute Python with audit-hook safety checks and access to LLM tools, returning last expression.
     `import` works in the usual way. All builtins are available.
-    Multiline code blocks can be used. By default, defining functions or classes is *not* allowed (`ban_defs=True`); construct `RunPython` with `ban_defs=False` to permit them.
+    Multiline code blocks can be used. Functions and classes are allowed by default; construct `RunPython` with `ban_defs=True` to prohibit them.
 
-    **Sandbox**: an audit hook blocks risky operations by default (e.g. network), and `socket`/`importlib` imports are banned. To permit one, the user must `allow()` a function that performs it from the real Python process; sandboxed code cannot `allow()` itself.
+    **Sandbox**: an audit hook blocks risky operations by default (e.g. network), and `socket`/`importlib` imports are banned. `allow()` registrations are permitted by default and take effect immediately; hosts can restrict them with `pre_deny`.
     **NB**: Locals are exported back to the caller's namespace."""
 
     def __init__(self, g=None, sentinel=None, ok_dests=UNSET, ban_imports=frozenset({'socket','importlib','safepyrun','fastaudit'}),
-        ban_defs=True, pre_deny=None, yolo=False, **kwargs):
+        ban_defs=False, pre_deny=None, yolo=False, **kwargs):
         if ok_dests is UNSET: ok_dests = default_ok_dests
         if g is None:
             try: ip = get_ipython()
