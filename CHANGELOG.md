@@ -2,6 +2,13 @@
 
 <!-- do not remove -->
 
+## 0.2.11
+
+### New Features
+
+- Allow function/class defs and allow() registrations by default; stop freezing `__pytools__` and drop background task waiting ([#76](https://github.com/AnswerDotAI/safepyrun/issues/76))
+
+
 ## 0.2.10
 
 ### New Features
